@@ -279,13 +279,32 @@ export function BanyanTree() {
   );
 }
 
-/** Ban Co Peak: stone platform, engraved chessboard table, Đế Thích statue with arms, lantern posts. */
+const BAN_CO_MODEL_PATH = "/models/ban-co-summit/ban-co-summit.gltf";
+const BAN_CO_MODEL_HEIGHT = 4.9;
+const BAN_CO_MODEL_BASE = 0.72;
+
+/** Ban Co Peak: imported scanned summit model on a stone platform. */
 export function BanCoSummit() {
-  const grid = useMemo(() => Array.from({ length: 9 }, (_, i) => -0.56 + i * 0.14), []);
-  const pieces = useMemo(
-    () => Array.from({ length: 10 }, (_, i) => ({ x: -0.5 + seeded(i) * 1.0, z: -0.5 + seeded(i + 20) * 1.0, red: i % 2 === 0 })),
-    []
-  );
+  const gltf = useGLTF(BAN_CO_MODEL_PATH);
+  const summitModel = useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    clone.rotation.x = -Math.PI / 2; // source OBJ is Z-up; the Three.js world is Y-up
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(clone);
+    const dimensions = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const scale = BAN_CO_MODEL_HEIGHT / (dimensions.y || 1);
+    clone.scale.setScalar(scale);
+    clone.position.set(-center.x * scale, BAN_CO_MODEL_BASE - box.min.y * scale, -center.z * scale);
+    const wrapper = new THREE.Group();
+    wrapper.add(clone);
+    return wrapper;
+  }, [gltf]);
   return (
     <group name="BanCoSummit">
       {/* Layered stone platform with steps */}
@@ -312,72 +331,7 @@ export function BanCoSummit() {
         );
       })}
 
-      {/* Chess table on a pedestal */}
-      <group position={[0, 0.6, 0]}>
-        <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.5, 0.75, 0.7, 12]} />
-          <meshStandardMaterial {...M.stone} />
-        </mesh>
-        <mesh position={[0, 0.78, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.5, 0.12, 1.5]} />
-          <meshStandardMaterial color="#cfd2c8" roughness={0.55} />
-        </mesh>
-        {grid.map((v) => (
-          <group key={v}>
-            <mesh position={[v, 0.846, 0]}>
-              <boxGeometry args={[0.012, 0.004, 1.12]} />
-              <meshStandardMaterial color="#2a2a2a" />
-            </mesh>
-            <mesh position={[0, 0.846, v]}>
-              <boxGeometry args={[1.12, 0.004, 0.012]} />
-              <meshStandardMaterial color="#2a2a2a" />
-            </mesh>
-          </group>
-        ))}
-        {pieces.map((p, i) => (
-          <mesh key={i} position={[p.x, 0.88, p.z]} castShadow>
-            <cylinderGeometry args={[0.05, 0.05, 0.05, 12]} />
-            <meshStandardMaterial color={p.red ? "#b3261e" : "#1c1c1c"} roughness={0.5} />
-          </mesh>
-        ))}
-      </group>
-
-      {/* Seated immortal (Đế Thích): robe, arms reaching to board, long white beard, topknot */}
-      <group position={[-1.7, 0.6, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <mesh position={[0, 0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.4, 0.46, 0.6, 12]} />
-          <meshStandardMaterial {...M.stone} />
-        </mesh>
-        <mesh position={[0, 0.95, 0]} scale={[1.15, 1, 0.9]} castShadow>
-          <capsuleGeometry args={[0.3, 0.5, 6, 14]} />
-          <meshStandardMaterial color="#d8d3c6" roughness={0.55} />
-        </mesh>
-        <mesh position={[0, 1.7, 0]} castShadow>
-          <sphereGeometry args={[0.2, 16, 14]} />
-          <meshStandardMaterial color="#d8d3c6" roughness={0.5} />
-        </mesh>
-        <mesh position={[0, 1.55, 0.14]} scale={[0.9, 1.6, 0.5]} castShadow>
-          <coneGeometry args={[0.13, 0.35, 8]} />
-          <meshStandardMaterial color="#f4f4ee" roughness={0.7} />
-        </mesh>
-        <mesh position={[0, 1.95, -0.02]} castShadow>
-          <sphereGeometry args={[0.09, 10, 8]} />
-          <meshStandardMaterial color="#d8d3c6" roughness={0.5} />
-        </mesh>
-        {[-1, 1].map((s) => (
-          <group key={s} position={[s * 0.38, 1.22, 0.05]} rotation={[-1.0, 0, s * -0.2]}>
-            <mesh position={[0, -0.28, 0]} castShadow>
-              <capsuleGeometry args={[0.09, 0.45, 4, 8]} />
-              <meshStandardMaterial color="#d8d3c6" roughness={0.55} />
-            </mesh>
-          </group>
-        ))}
-      </group>
-      {/* Opposite empty stool */}
-      <mesh position={[1.7, 0.9, 0]} castShadow>
-        <cylinderGeometry args={[0.4, 0.46, 0.6, 12]} />
-        <meshStandardMaterial {...M.stone} />
-      </mesh>
+      <primitive object={summitModel} />
 
       {/* Elevation marker + flag pole */}
       <group position={[3.0, 0.7, -2.4]} rotation={[0, -0.4, 0]}>
@@ -451,3 +405,4 @@ export function LinhUngStatue() {
 }
 
 useGLTF.preload(LINH_UNG_PATH);
+useGLTF.preload(BAN_CO_MODEL_PATH);
