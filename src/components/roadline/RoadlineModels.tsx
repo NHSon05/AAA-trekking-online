@@ -5,14 +5,16 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import {
-  getBanyanTrailCurve,
   getClosestRoadInfo,
   getRoadCurve,
   getRouteFrame,
   getTerrainHeight,
   MONKEY_TERRITORIES,
+  SCENIC_PULLOUT_FRACTIONS,
   SON_TRA_LANDMARKS,
 } from "./roadData";
+
+export { RoadSegments } from "./RoadSegments";
 
 function nearLandmark(x: number, z: number, id: string, r: number) {
   const lm = SON_TRA_LANDMARKS.find((l) => l.id === id);
@@ -20,11 +22,11 @@ function nearLandmark(x: number, z: number, id: string, r: number) {
 }
 
 function nearScenicPullout(x: number, z: number, radius: number) {
-  return [0.07, 0.19, 0.31, 0.43, 0.56, 0.69, 0.82, 0.94].some((progress, index) => {
+  return SCENIC_PULLOUT_FRACTIONS.some((progress, index) => {
     const frame = getRouteFrame(progress);
     const direction = index % 2 === 0 ? 1 : -1;
-    const centerX = frame.point.x + frame.side.x * 7.2 * direction;
-    const centerZ = frame.point.z + frame.side.z * 7.2 * direction;
+    const centerX = frame.point.x + frame.side.x * 5.8 * direction;
+    const centerZ = frame.point.z + frame.side.z * 5.8 * direction;
     return Math.hypot(x - centerX, z - centerZ) < radius;
   });
 }
@@ -76,177 +78,6 @@ function normalizeModel(scene: THREE.Object3D, size: number, axis: "y" | "xz" = 
 function seededRandom(seed: number): number {
   const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
   return x - Math.floor(x);
-}
-
-/**
- * Builds the 3D winding mountain roadline using the "Road block by Luca Regazzi" 3D GLB model,
- * supplemented by a continuous terrain-hugging sub-base, forest trail stones to the Ancient Banyan,
- * and Vietnam-style red-and-white kilometer milestones along the climb.
- */
-export function RoadSegments() {
-  // Continuous ribbon meshes (asphalt, edge lines, centre dashes, kerbs) that follow the curve exactly,
-  // so tight hairpins never open gaps like rigid straight road blocks do.
-  const { asphalt, edgeLines, dashes, kerbs, milestones } = useMemo(() => {
-    const curve = getRoadCurve();
-    const length = curve.getLength();
-    const perStep = 0.5;
-    const samples = curve.getSpacedPoints(Math.ceil(length / perStep));
-    const up = new THREE.Vector3(0, 1, 0);
-    const sides = samples.map((p, i) => {
-      const a = samples[Math.max(0, i - 1)];
-      const b = samples[Math.min(samples.length - 1, i + 1)];
-      const t = b.clone().sub(a).setY(0).normalize();
-      return new THREE.Vector3().crossVectors(t, up).normalize();
-    });
-
-    const strip = (from: number, to: number, lift: number, startIdx = 0, endIdx = samples.length - 1) => {
-      const pos: number[] = [];
-      const idx: number[] = [];
-      let n = 0;
-      for (let i = startIdx; i <= endIdx; i++) {
-        const p = samples[i];
-        const s = sides[i];
-        pos.push(p.x + s.x * from, p.y + lift, p.z + s.z * from, p.x + s.x * to, p.y + lift, p.z + s.z * to);
-        if (i < endIdx) idx.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
-        n += 2;
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-      g.setIndex(idx);
-      g.computeVertexNormals();
-      return g;
-    };
-
-    // Raised kerb: a 4-sided tube strip along one road edge
-    const kerb = (side: number) => {
-      const inner = side * 2.45;
-      const outer = side * 2.73;
-      const pos: number[] = [];
-      const idx: number[] = [];
-      let n = 0;
-      for (let i = 0; i < samples.length; i++) {
-        const p = samples[i];
-        const s = sides[i];
-        const y0 = p.y - 0.02;
-        const y1 = p.y + 0.16;
-        pos.push(
-          p.x + s.x * inner, y0, p.z + s.z * inner,
-          p.x + s.x * inner, y1, p.z + s.z * inner,
-          p.x + s.x * outer, y1, p.z + s.z * outer,
-          p.x + s.x * outer, y0, p.z + s.z * outer
-        );
-        if (i < samples.length - 1) {
-          for (let k = 0; k < 4; k++) {
-            const a = n + k;
-            const b = n + ((k + 1) % 4);
-            idx.push(a, b, a + 4, b, b + 4, a + 4);
-          }
-        }
-        n += 4;
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-      g.setIndex(idx);
-      g.computeVertexNormals();
-      return g;
-    };
-
-    // Dashed centre line: 2 m dash, 2 m gap
-    const dashGeos: THREE.BufferGeometry[] = [];
-    const dashLen = Math.round(2 / perStep);
-    for (let i = 0; i + dashLen < samples.length; i += dashLen * 2) {
-      dashGeos.push(strip(-0.08, 0.08, 0.055, i, i + dashLen));
-    }
-
-    const kms: { p: THREE.Vector3; s: THREE.Vector3 }[] = [];
-    const kmStep = Math.round(36.36 / perStep);
-    for (let i = kmStep; i < samples.length - 10; i += kmStep) kms.push({ p: samples[i], s: sides[i] });
-
-    return {
-      asphalt: strip(-2.45, 2.45, 0.03),
-      edgeLines: [strip(-2.25, -2.13, 0.05), strip(2.13, 2.25, 0.05)],
-      dashes: mergeStrips(dashGeos),
-      kerbs: [kerb(-1), kerb(1)],
-      milestones: kms,
-    };
-  }, []);
-
-  // Stepping trail segments for the Ancient Banyan forest trail spur
-  const trailSteps = useMemo(() => {
-    const trailCurve = getBanyanTrailCurve();
-    const count = 26;
-    const steps: { position: [number, number, number]; rotationY: number }[] = [];
-    for (let i = 1; i <= count; i++) {
-      const u = i / count;
-      const pt = trailCurve.getPointAt(u);
-      const tan = trailCurve.getTangentAt(u);
-      steps.push({ position: [pt.x, pt.y + 0.03, pt.z], rotationY: Math.atan2(tan.x, tan.z) });
-    }
-    return steps;
-  }, []);
-
-  return (
-    <group name="SonTraRoadline">
-      <mesh geometry={asphalt} receiveShadow>
-        <meshStandardMaterial color="#3a3f44" roughness={0.92} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} />
-      </mesh>
-      {edgeLines.map((g, i) => (
-        <mesh key={i} geometry={g}>
-          <meshStandardMaterial color="#f1f1ea" roughness={0.7} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-4} />
-        </mesh>
-      ))}
-      <mesh geometry={dashes}>
-        <meshStandardMaterial color="#f2d64b" roughness={0.7} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-4} />
-      </mesh>
-      {kerbs.map((g, i) => (
-        <mesh key={i} geometry={g} castShadow receiveShadow>
-          <meshStandardMaterial color="#cfd2cc" roughness={0.8} side={THREE.DoubleSide} />
-        </mesh>
-      ))}
-
-      {/* Red-and-white kilometre posts every real kilometre */}
-      {milestones.map((m, i) => (
-        <group key={i} position={[m.p.x + m.s.x * 3.1, m.p.y, m.p.z + m.s.z * 3.1]}>
-          <mesh position={[0, 0.38, 0]} castShadow receiveShadow>
-            <boxGeometry args={[0.26, 0.76, 0.26]} />
-            <meshStandardMaterial color="#f2f4f0" roughness={0.6} />
-          </mesh>
-          <mesh position={[0, 0.68, 0]} castShadow>
-            <boxGeometry args={[0.27, 0.22, 0.27]} />
-            <meshStandardMaterial color="#c9332b" roughness={0.5} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* Secondary Dirt & Stone Trekking Trail to the Ancient Banyan Tree */}
-      {trailSteps.map((step, idx) => (
-        <group key={`trail-${idx}`} position={step.position} rotation={[0, step.rotationY, 0]}>
-          <mesh receiveShadow castShadow position={[0, 0.02, 0]}>
-            <cylinderGeometry args={[0.95, 1.05, 0.08, 7]} />
-            <meshStandardMaterial color="#7b6853" roughness={0.95} />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
-}
-
-function mergeStrips(geos: THREE.BufferGeometry[]) {
-  const pos: number[] = [];
-  const idx: number[] = [];
-  let offset = 0;
-  for (const g of geos) {
-    const p = g.attributes.position.array;
-    for (let i = 0; i < p.length; i++) pos.push(p[i]);
-    const ix = g.index!.array;
-    for (let i = 0; i < ix.length; i++) idx.push(ix[i] + offset);
-    offset += p.length / 3;
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  out.setIndex(idx);
-  out.computeVertexNormals();
-  return out;
 }
 
 /**
@@ -626,15 +457,16 @@ function MonkeyTroop({
 export function RoadsideVehicles() {
   const motivaGltf = useGLTF("/models/moto_motiva.glb");
   const vespaGltf = useGLTF("/models/moto_vespa.glb");
-  const stops = useMemo(() => [0.07, 0.19, 0.31, 0.43, 0.56, 0.69, 0.82, 0.94].map((progress, index) => {
+  const stops = useMemo(() => SCENIC_PULLOUT_FRACTIONS.map((progress, index) => {
     const frame = getRouteFrame(progress);
     const direction = index % 2 === 0 ? 1 : -1;
-    const side = frame.side.clone().multiplyScalar(7.2 * direction);
+    const side = frame.side.clone().multiplyScalar(4.4 * direction);
     const x = frame.point.x + side.x;
     const z = frame.point.z + side.z;
+    const y = Math.max(frame.point.y, getTerrainHeight(x, z));
     return {
       id: index,
-      position: [x, getTerrainHeight(x, z), z] as [number, number, number],
+      position: [x, y, z] as [number, number, number],
       facing: Math.atan2(side.x, side.z),
       roadFacing: Math.atan2(frame.tangent.x, frame.tangent.z),
       tangent: frame.tangent,
