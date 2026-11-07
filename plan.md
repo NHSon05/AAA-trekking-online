@@ -1,6 +1,5 @@
 ---
 title: Untitled
-
 ---
 
 # SON TRA — Beyond The Map
@@ -52,13 +51,13 @@ Phạm vi ban đầu tập trung vào bán đảo Sơn Trà, Đà Nẵng.
 
 Các địa điểm dự kiến:
 
-| Địa điểm | Nội dung |
-|---|---|
-| Đỉnh Bàn Cờ | Giới thiệu địa điểm, hình ảnh và vị trí |
-| Chùa Linh Ứng | Giới thiệu công trình và thông tin tham quan |
-| Cây đa ngàn năm | Giới thiệu điểm tham quan thiên nhiên |
-| Các điểm ngắm cảnh | Khám phá cảnh quan và vị trí |
-| Các tuyến đường Sơn Trà | Hiển thị đường đi và thông tin tuyến |
+| Địa điểm                | Nội dung                                     |
+| ----------------------- | -------------------------------------------- |
+| Đỉnh Bàn Cờ             | Giới thiệu địa điểm, hình ảnh và vị trí      |
+| Chùa Linh Ứng           | Giới thiệu công trình và thông tin tham quan |
+| Cây đa ngàn năm         | Giới thiệu điểm tham quan thiên nhiên        |
+| Các điểm ngắm cảnh      | Khám phá cảnh quan và vị trí                 |
+| Các tuyến đường Sơn Trà | Hiển thị đường đi và thông tin tuyến         |
 
 **Lưu ý:** Danh sách địa điểm, tọa độ, tình trạng tiếp cận và tuyến đường cần được kiểm tra bằng nguồn dữ liệu đáng tin cậy trước khi đưa vào bản demo. Không mặc định rằng mọi đường trên bản đồ đều là đường leo núi hợp pháp hoặc an toàn.
 
@@ -165,12 +164,12 @@ Mục tiêu: Cho phép người dùng lựa chọn hành trình và xem thông t
 
 **Các chế độ tuyến đường dự kiến:**
 
-| Chế độ | Ý nghĩa |
-|---|---|
-| Shortest Route | Tuyến có khoảng cách ngắn nhất theo dữ liệu định tuyến |
-| Fastest Route | Tuyến có thời gian ước tính ngắn nhất |
-| Scenic Route | Tuyến ưu tiên các điểm tham quan, nếu có dữ liệu phù hợp |
-| Easy Route | Tuyến ưu tiên mức độ dễ đi, chỉ triển khai khi có dữ liệu độ dốc, mặt đường và khả năng tiếp cận đáng tin cậy |
+| Chế độ         | Ý nghĩa                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| Shortest Route | Tuyến có khoảng cách ngắn nhất theo dữ liệu định tuyến                                                        |
+| Fastest Route  | Tuyến có thời gian ước tính ngắn nhất                                                                         |
+| Scenic Route   | Tuyến ưu tiên các điểm tham quan, nếu có dữ liệu phù hợp                                                      |
+| Easy Route     | Tuyến ưu tiên mức độ dễ đi, chỉ triển khai khi có dữ liệu độ dốc, mặt đường và khả năng tiếp cận đáng tin cậy |
 
 **Thông tin kết quả:**
 
@@ -193,14 +192,14 @@ Mục tiêu: Hỗ trợ người mới chuẩn bị trước khi khám phá Sơn
 
 Các nhóm hành trang:
 
-| Nhóm | Vật dụng tham khảo |
-|---|---|
-| Nước uống | Bình nước |
-| Trang phục | Quần áo thoải mái, giày phù hợp |
-| Bảo vệ cá nhân | Mũ, kem chống nắng |
-| Thiết bị | Điện thoại, pin dự phòng |
-| An toàn | Bộ sơ cứu cơ bản |
-| Khác | Túi đựng rác, giấy tờ cần thiết |
+| Nhóm           | Vật dụng tham khảo              |
+| -------------- | ------------------------------- |
+| Nước uống      | Bình nước                       |
+| Trang phục     | Quần áo thoải mái, giày phù hợp |
+| Bảo vệ cá nhân | Mũ, kem chống nắng              |
+| Thiết bị       | Điện thoại, pin dự phòng        |
+| An toàn        | Bộ sơ cứu cơ bản                |
+| Khác           | Túi đựng rác, giấy tờ cần thiết |
 
 Người dùng có thể chọn:
 
@@ -276,38 +275,38 @@ Một số câu hỏi mẫu:
 
 ### 4.1. Frontend
 
-| Công nghệ | Vai trò |
-|---|---|
+| Công nghệ          | Vai trò                    |
+| ------------------ | -------------------------- |
 | Next.js App Router | Framework xây dựng website |
-| TypeScript | Kiểm soát kiểu dữ liệu |
-| Tailwind CSS | Xây dựng giao diện |
-| shadcn/ui | Các thành phần giao diện |
-| Lucide React | Icon |
-| React Hook Form | Quản lý biểu mẫu |
-| Zod | Kiểm tra dữ liệu đầu vào |
+| TypeScript         | Kiểm soát kiểu dữ liệu     |
+| Tailwind CSS       | Xây dựng giao diện         |
+| shadcn/ui          | Các thành phần giao diện   |
+| Lucide React       | Icon                       |
+| React Hook Form    | Quản lý biểu mẫu           |
+| Zod                | Kiểm tra dữ liệu đầu vào   |
 
 ### 4.2. Bản đồ và địa hình 3D
 
-| Công nghệ | Vai trò |
-|---|---|
-| MapLibre GL JS | Hiển thị bản đồ tương tác |
-| OpenFreeMap | Nguồn bản đồ nền |
-| OpenStreetMap | Dữ liệu địa lý |
-| DEM | Dữ liệu độ cao địa hình |
-| Three.js | Xây dựng cảnh 3D tùy chỉnh |
-| React Three Fiber | Tích hợp Three.js với React |
-| Drei | Các tiện ích hỗ trợ Three.js |
-| Blender | Tạo mô hình 3D tùy chỉnh |
+| Công nghệ         | Vai trò                      |
+| ----------------- | ---------------------------- |
+| MapLibre GL JS    | Hiển thị bản đồ tương tác    |
+| OpenFreeMap       | Nguồn bản đồ nền             |
+| OpenStreetMap     | Dữ liệu địa lý               |
+| DEM               | Dữ liệu độ cao địa hình      |
+| Three.js          | Xây dựng cảnh 3D tùy chỉnh   |
+| React Three Fiber | Tích hợp Three.js với React  |
+| Drei              | Các tiện ích hỗ trợ Three.js |
+| Blender           | Tạo mô hình 3D tùy chỉnh     |
 
 **Lưu ý:** MapLibre là công cụ hiển thị bản đồ, không tự cung cấp toàn bộ dữ liệu bản đồ hoặc dữ liệu độ cao. Muốn hiển thị địa hình 3D cần có nguồn DEM tương thích.
 
 ### 4.3. Routing — Tính toán tuyến đường
 
-| Công nghệ | Vai trò |
-|---|---|
-| Valhalla | Tính toán tuyến đường |
-| OpenStreetMap | Dữ liệu đường đi |
-| GeoJSON | Lưu trữ và trao đổi dữ liệu tuyến |
+| Công nghệ     | Vai trò                           |
+| ------------- | --------------------------------- |
+| Valhalla      | Tính toán tuyến đường             |
+| OpenStreetMap | Dữ liệu đường đi                  |
+| GeoJSON       | Lưu trữ và trao đổi dữ liệu tuyến |
 
 Valhalla hỗ trợ nhiều hình thức di chuyển như đi bộ, xe đạp và ô tô. Tuy nhiên, cần kiểm tra khả năng định tuyến và chất lượng dữ liệu tại khu vực Sơn Trà trước khi sử dụng trong demo.
 
@@ -315,12 +314,12 @@ Có thể cân nhắc OSRM cho các tuyến đường phù hợp với cấu hì
 
 ### 4.4. AI Integration
 
-| Công nghệ | Vai trò |
-|---|---|
-| OpenAI API | Xử lý hội thoại và tư vấn |
-| OpenAI SDK | Gửi yêu cầu đến API |
-| Responses API | Tạo phản hồi từ mô hình |
-| Zod | Kiểm tra dữ liệu gửi đến AI |
+| Công nghệ     | Vai trò                     |
+| ------------- | --------------------------- |
+| OpenAI API    | Xử lý hội thoại và tư vấn   |
+| OpenAI SDK    | Gửi yêu cầu đến API         |
+| Responses API | Tạo phản hồi từ mô hình     |
+| Zod           | Kiểm tra dữ liệu gửi đến AI |
 
 ### 4.5. Backend và dữ liệu
 
@@ -600,23 +599,23 @@ Phong cách thiết kế:
 
 ### 8.2. Màu sắc tham khảo
 
-| Màu | Mục đích |
-|---|---|
-| Forest Green | Màu chủ đạo |
-| Deep Green | Nền và khu vực nhấn |
-| Sand Beige | Màu nền phụ |
-| White | Nội dung và card |
-| Sky Blue | Thông tin bản đồ |
+| Màu          | Mục đích            |
+| ------------ | ------------------- |
+| Forest Green | Màu chủ đạo         |
+| Deep Green   | Nền và khu vực nhấn |
+| Sand Beige   | Màu nền phụ         |
+| White        | Nội dung và card    |
+| Sky Blue     | Thông tin bản đồ    |
 
 ### 8.3. Các trang chính
 
-| Trang | Nội dung |
-|---|---|
-| `/` | Trang giới thiệu |
-| `/explorer` | Bản đồ 3D |
-| `/landmarks/[slug]` | Chi tiết địa điểm |
-| `/planner` | Lập kế hoạch tuyến đường |
-| `/preparation` | Chuẩn bị hành trang |
+| Trang               | Nội dung                 |
+| ------------------- | ------------------------ |
+| `/`                 | Trang giới thiệu         |
+| `/explorer`         | Bản đồ 3D                |
+| `/landmarks/[slug]` | Chi tiết địa điểm        |
+| `/planner`          | Lập kế hoạch tuyến đường |
+| `/preparation`      | Chuẩn bị hành trang      |
 
 AI Chat có thể xuất hiện dưới dạng widget dùng chung trên các trang.
 
@@ -626,16 +625,16 @@ AI Chat có thể xuất hiện dưới dạng widget dùng chung trên các tra
 
 ### 9.1. Công cụ cần thiết
 
-| Công cụ | Mục đích |
-|---|---|
-| Node.js LTS | Môi trường chạy JavaScript |
-| pnpm | Quản lý package |
-| Cursor hoặc VS Code | IDE |
-| Git | Quản lý phiên bản |
-| GitHub | Lưu trữ source code |
-| Blender | Tạo tài nguyên 3D |
-| Chrome | Kiểm tra website |
-| OpenAI Platform | Quản lý API Key |
+| Công cụ             | Mục đích                   |
+| ------------------- | -------------------------- |
+| Node.js LTS         | Môi trường chạy JavaScript |
+| pnpm                | Quản lý package            |
+| Cursor hoặc VS Code | IDE                        |
+| Git                 | Quản lý phiên bản          |
+| GitHub              | Lưu trữ source code        |
+| Blender             | Tạo tài nguyên 3D          |
+| Chrome              | Kiểm tra website           |
+| OpenAI Platform     | Quản lý API Key            |
 
 ### 9.2. Khởi tạo dự án
 
@@ -748,15 +747,15 @@ Nếu cần giao diện shadcn/ui, khởi tạo và cài đặt các component c
 
 ### 11.1. Functional Testing
 
-| Chức năng | Kết quả mong muốn |
-|---|---|
-| Landing Page | Hiển thị đầy đủ nội dung |
-| 3D Explorer | Bản đồ tương tác được |
-| Landmark | Chọn địa điểm và xem thông tin |
+| Chức năng     | Kết quả mong muốn               |
+| ------------- | ------------------------------- |
+| Landing Page  | Hiển thị đầy đủ nội dung        |
+| 3D Explorer   | Bản đồ tương tác được           |
+| Landmark      | Chọn địa điểm và xem thông tin  |
 | Route Planner | Trả về tuyến nếu dịch vụ hỗ trợ |
-| Preparation | Hiển thị checklist |
-| AI Chat | Gửi câu hỏi và nhận phản hồi |
-| API Error | Hiển thị lỗi dễ hiểu |
+| Preparation   | Hiển thị checklist              |
+| AI Chat       | Gửi câu hỏi và nhận phản hồi    |
+| API Error     | Hiển thị lỗi dễ hiểu            |
 
 ### 11.2. Data Validation
 
@@ -912,4 +911,4 @@ Các tính năng mở rộng chỉ nên triển khai khi có nguồn dữ liệu
 
 **SON TRA — Beyond The Map**
 
-*Explore in 3D. Discover with AI. Experience Nature.*
+_Explore in 3D. Discover with AI. Experience Nature._
