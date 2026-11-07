@@ -4,7 +4,7 @@ import { Html } from "@react-three/drei";
 import { useMemo } from "react";
 import * as THREE from "three";
 import { Human } from "../figures/Human";
-import { BanCoSummit, BanyanTree, QuanAmStatue, TrailheadGate } from "./LandmarkModels";
+import { BanCoSummit, BanyanTree, LinhUngStatue, TrailheadGate } from "./LandmarkModels";
 import { getClosestRoadInfo, getRoadCurve, getRouteFrame, getTerrainHeight, LandmarkPoint, SON_TRA_LANDMARKS } from "./roadData";
 
 const LM = Object.fromEntries(SON_TRA_LANDMARKS.map((l) => [l.id, l.position])) as Record<string, [number, number, number]>;
@@ -59,7 +59,7 @@ export function SonTraLandmarks({
 
       {/* 2. Linh Ung Lady Buddha */}
       <group position={[PLAZA.x, PLAZA.y, PLAZA.z]} rotation={[0, PLAZA.rotY, 0]}>
-        <QuanAmStatue />
+        <LinhUngStatue />
       </group>
 
       {/* 3. Ancient Banyan Tree */}

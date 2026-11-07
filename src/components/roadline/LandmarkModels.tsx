@@ -1,5 +1,6 @@
 "use client";
 
+import { useGLTF } from "@react-three/drei";
 import { useMemo } from "react";
 import * as THREE from "three";
 
@@ -406,3 +407,47 @@ export function BanCoSummit() {
     </group>
   );
 }
+
+/** Linh Ung Lady Buddha scanned model (public/models/linh-ung.glb, ~120k tris) on a stone courtyard. */
+const LINH_UNG_PATH = "/models/linh-ung.glb";
+const LINH_UNG_HEIGHT = 15;
+const LINH_UNG_BASE = 0.9;
+
+export function LinhUngStatue() {
+  const gltf = useGLTF(LINH_UNG_PATH);
+  const model = useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(clone);
+    const dim = box.getSize(new THREE.Vector3());
+    const s = LINH_UNG_HEIGHT / (dim.y || 1);
+    const c = box.getCenter(new THREE.Vector3());
+    clone.scale.multiplyScalar(s);
+    clone.position.set(-c.x * s, LINH_UNG_BASE - box.min.y * s, -c.z * s);
+    const wrap = new THREE.Group();
+    wrap.add(clone);
+    return wrap;
+  }, [gltf]);
+  return (
+    <group name="LinhUngStatue">
+      <mesh position={[0, 0.15, 0]} receiveShadow castShadow>
+        <cylinderGeometry args={[5.4, 5.6, 0.3, 32]} />
+        <meshStandardMaterial {...M.marble} />
+      </mesh>
+      {[4.2, 3.4].map((r, i) => (
+        <mesh key={r} position={[0, 0.45 + i * 0.22, 0]} receiveShadow castShadow>
+          <cylinderGeometry args={[r, r + 0.25, 0.25, 28]} />
+          <meshStandardMaterial {...M.marble} />
+        </mesh>
+      ))}
+      <primitive object={model} />
+    </group>
+  );
+}
+
+useGLTF.preload(LINH_UNG_PATH);
