@@ -17,8 +17,9 @@ export function PlayerCamera({
 
   useEffect(() => {
     if (mode === "overview") {
-      camera.position.set(45, 42, 65);
-      camera.lookAt(0, 6, -15);
+      // Pull back high above the whole peninsula (terrain ≈ 180 x 230)
+      camera.position.set(120, 150, 200);
+      camera.lookAt(0, 0, -10);
     }
   }, [mode, camera]);
 

@@ -17,6 +17,9 @@ const MODEL_PATHS = {
   quaterniusTrees: "/models/Trees by Quaternius - etFGNvsiFv.glb",
   quaterniusGrass: "/models/Grass by Quaternius - UGTOzcO3P2.glb",
   baboon: "/models/Baboon by Poly by Google - aeLFKp6X19x.glb",
+  monkeyWukong: "/models/monkey-wukong.glb",
+  monkey: "/models/monkey.glb",
+  forest: "/models/forest.glb",
 } as const;
 
 // Preload all 5 3D models
@@ -25,6 +28,29 @@ useGLTF.preload(MODEL_PATHS.marcTree);
 useGLTF.preload(MODEL_PATHS.quaterniusTrees);
 useGLTF.preload(MODEL_PATHS.quaterniusGrass);
 useGLTF.preload(MODEL_PATHS.baboon);
+useGLTF.preload(MODEL_PATHS.monkeyWukong);
+useGLTF.preload(MODEL_PATHS.monkey);
+useGLTF.preload(MODEL_PATHS.forest);
+
+/** Clone a glTF scene, scale it to `height` metres (or `width` if given) and put feet at y = 0, centred on x/z. */
+function normalizeModel(scene: THREE.Object3D, size: number, axis: "y" | "xz" = "y") {
+  const clone = scene.clone(true);
+  clone.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+  const box = new THREE.Box3().setFromObject(clone);
+  const dim = box.getSize(new THREE.Vector3());
+  const s = size / (axis === "y" ? dim.y || 1 : Math.max(dim.x, dim.z) || 1);
+  const center = box.getCenter(new THREE.Vector3());
+  clone.scale.multiplyScalar(s);
+  clone.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+  const wrapper = new THREE.Group();
+  wrapper.add(clone);
+  return wrapper;
+}
 
 /**
  * Deterministic pseudo-random generator for consistent placement across renders
@@ -428,25 +454,18 @@ export function RoadsideGrass() {
  * along the mid-mountain curve, perched on natural rocks and observing from a safe distance.
  */
 export function WildlifeZone() {
-  const baboonGltf = useGLTF(MODEL_PATHS.baboon);
+  const wukongGltf = useGLTF(MODEL_PATHS.monkeyWukong);
+  const monkeyGltf = useGLTF(MODEL_PATHS.monkey);
   const groupRef = useRef<THREE.Group>(null);
 
-  const normalizedPrimate = useMemo(() => {
-    const wrapper = new THREE.Group();
-    const cloned = baboonGltf.scene.clone(true);
-    cloned.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-    // Raw bounds: min Y = -53.7148, max Y = 53.7148. Scale to ~0.95m tall with feet at y = 0.
-    const s = 0.009;
-    cloned.scale.setScalar(s);
-    cloned.position.set(0, 53.7148 * s, 0);
-    wrapper.add(cloned);
-    return wrapper;
-  }, [baboonGltf]);
+  // Index 0 = Sun Wukong monkey king (1.1 m), index 1 = regular monkey (0.8 m)
+  const primates = useMemo(
+    () => [
+      normalizeModel(wukongGltf.scene, 1.1),
+      normalizeModel(monkeyGltf.scene, 0.8),
+    ],
+    [wukongGltf, monkeyGltf]
+  );
 
   const troop = useMemo(() => {
     const spots: {
@@ -484,8 +503,31 @@ export function WildlifeZone() {
             <meshStandardMaterial color="#676d66" roughness={0.9} />
           </mesh>
           <group name="PrimateActor" position={[0, 0.42, 0]}>
-            <primitive object={normalizedPrimate.clone(true)} />
+            <primitive object={primates[idx === 0 ? 0 : 1].clone(true)} />
           </group>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Dense "Forest environnement" backdrop clumps placed off the road on the mountain flanks.
+ */
+export function ForestBackdrop() {
+  const gltf = useGLTF(MODEL_PATHS.forest);
+  const proto = useMemo(() => normalizeModel(gltf.scene, 34, "xz"), [gltf]);
+  const spots: [number, number, number][] = [
+    [-45, 0, -10],
+    [45, 0, -40],
+    [-40, 0, -70],
+    [40, 0, 20],
+  ];
+  return (
+    <group name="SonTraForestBackdrop">
+      {spots.map(([x, , z], i) => (
+        <group key={i} position={[x, getTerrainHeight(x, z), z]} rotation={[0, i * 1.7, 0]}>
+          <primitive object={proto.clone(true)} />
         </group>
       ))}
     </group>

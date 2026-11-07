@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import {
+  ForestBackdrop,
   ForestTrees,
   RoadSegments,
   RoadsideGrass,
@@ -31,6 +32,7 @@ export function SonTraRoadline({
       <Suspense fallback={null}>
         <RoadSegments />
         <ForestTrees />
+        <ForestBackdrop />
         <RoadsideGrass />
         <WildlifeZone />
       </Suspense>
