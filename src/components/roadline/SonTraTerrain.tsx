@@ -9,8 +9,8 @@ export function SonTraTerrain() {
   const terrainGeometry = useMemo(() => {
     const width = 180;
     const depth = 230;
-    const segX = 140;
-    const segZ = 180;
+    const segX = 110;
+    const segZ = 140;
 
     const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
     geo.rotateX(-Math.PI / 2);
@@ -20,7 +20,6 @@ export function SonTraTerrain() {
     const color = new THREE.Color();
 
     for (let i = 0; i < posAttr.count; i++) {
-      // Shift center slightly North-West so the peninsula roadline fits comfortably
       const x = posAttr.getX(i) - 6;
       const z = posAttr.getZ(i) - 18;
       posAttr.setXYZ(i, x, getTerrainHeight(x, z), z);
@@ -28,7 +27,9 @@ export function SonTraTerrain() {
     geo.computeVertexNormals();
     const normals = geo.attributes.normal;
     const jitter = (x: number, z: number) =>
-      (Math.sin(x * 1.7 + z * 2.3) * 0.5 + Math.sin(x * 0.6 - z * 0.9) * 0.5) * 0.5 + 0.5;
+      (Math.sin(x * 1.7 + z * 2.3) * 0.5 + Math.sin(x * 0.6 - z * 0.9) * 0.5) *
+        0.5 +
+      0.5;
 
     for (let i = 0; i < posAttr.count; i++) {
       const x = posAttr.getX(i);
@@ -39,19 +40,19 @@ export function SonTraTerrain() {
       const j = jitter(x, z);
 
       if (y < -0.35) {
-        color.set("#a99a72"); // wet sand under water
+        color.set("#a99a72");
       } else if (y < 0.35 && (x > 76 || z > 64 || y < 0.1)) {
-        color.set("#dccb9c").lerp(new THREE.Color("#c9b886"), j * 0.5); // beach
+        color.set("#dccb9c").lerp(new THREE.Color("#c9b886"), j * 0.5);
       } else if (roadInfo.distance < 3.6) {
-        color.set("#5a5a48"); // dusty road shoulder
+        color.set("#5a5a48");
       } else if (slope > 0.16) {
-        color.set("#7a7468").lerp(new THREE.Color("#5c5a52"), j); // exposed granite on steep slopes
+        color.set("#7a7468").lerp(new THREE.Color("#5c5a52"), j);
       } else if (y > 9.5) {
-        color.set("#3f6b43").lerp(new THREE.Color("#2f5636"), j); // high ridge moss
+        color.set("#3f6b43").lerp(new THREE.Color("#2f5636"), j);
       } else if (y > 4.5) {
-        color.set("#2d5a38").lerp(new THREE.Color("#3d7243"), j); // mid forest floor
+        color.set("#2d5a38").lerp(new THREE.Color("#3d7243"), j);
       } else {
-        color.set("#3a6c3e").lerp(new THREE.Color("#4c8048"), j); // lowland
+        color.set("#3a6c3e").lerp(new THREE.Color("#4c8048"), j);
       }
 
       colors[i * 3] = color.r;
@@ -65,21 +66,25 @@ export function SonTraTerrain() {
 
   return (
     <group name="SonTraPeninsulaTerrain">
-      {/* Sculpted Peninsula Mountain Mesh */}
       <mesh geometry={terrainGeometry} receiveShadow>
         <meshStandardMaterial vertexColors roughness={0.92} metalness={0.04} />
       </mesh>
-
       <Sea />
     </group>
   );
 }
 
-/** Animated sea: shallow turquoise near shore fading to deep blue, with white foam along the coastline. */
+/**
+ * Optimized Sea mesh:
+ * - Uses a 48x48 grid (5x fewer vertices than 110x110)
+ * - Throttles wave displacement updates to ~20 FPS and skips costly per-frame computeVertexNormals()
+ */
 function Sea() {
   const mesh = useRef<THREE.Mesh>(null);
+  const lastUpdate = useRef(0);
+
   const geometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(440, 440, 110, 110);
+    const geo = new THREE.PlaneGeometry(440, 440, 48, 48);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
@@ -101,23 +106,44 @@ function Sea() {
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     return geo;
   }, []);
-  const base = useMemo(() => Float32Array.from(geometry.attributes.position.array as Float32Array), [geometry]);
+
+  const base = useMemo(
+    () => Float32Array.from(geometry.attributes.position.array as Float32Array),
+    [geometry]
+  );
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
+    if (t - lastUpdate.current < 0.05) return;
+    lastUpdate.current = t;
+
     const pos = geometry.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const x = base[i * 3];
       const z = base[i * 3 + 2];
-      pos.setY(i, Math.sin(x * 0.12 + t * 0.9) * 0.1 + Math.cos(z * 0.1 + t * 0.7) * 0.08 + Math.sin((x + z) * 0.25 + t * 1.4) * 0.04);
+      pos.setY(
+        i,
+        Math.sin(x * 0.12 + t * 0.9) * 0.1 +
+          Math.cos(z * 0.1 + t * 0.7) * 0.08
+      );
     }
     pos.needsUpdate = true;
-    geometry.computeVertexNormals();
   });
 
   return (
-    <mesh ref={mesh} geometry={geometry} position={[20, -0.45, 0]} receiveShadow>
-      <meshStandardMaterial vertexColors roughness={0.18} metalness={0.2} transparent opacity={0.88} />
+    <mesh
+      ref={mesh}
+      geometry={geometry}
+      position={[20, -0.45, 0]}
+      receiveShadow
+    >
+      <meshStandardMaterial
+        vertexColors
+        roughness={0.18}
+        metalness={0.2}
+        transparent
+        opacity={0.88}
+      />
     </mesh>
   );
 }

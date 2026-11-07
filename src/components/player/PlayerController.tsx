@@ -43,8 +43,16 @@ export const PlayerController = forwardRef<THREE.Group, PlayerProps>(
     };
     const [input, setInput] = useState<Record<string, boolean>>({});
     const [moving, setMoving] = useState(false);
+    const movingRef = useRef(false);
     const lastPosition = useRef(new THREE.Vector3(...position));
     const autoProgress = useRef(0);
+
+    const updateMoving = (next: boolean) => {
+      if (movingRef.current !== next) {
+        movingRef.current = next;
+        setMoving(next);
+      }
+    };
 
     // Sync position & rotation when external teleport / checkpoint selection changes `position`
     useEffect(() => {
@@ -91,9 +99,9 @@ export const PlayerController = forwardRef<THREE.Group, PlayerProps>(
 
         ref.current.position.set(pt.x, groundY, pt.z);
         ref.current.rotation.y = Math.atan2(tan.x, tan.z);
-        setMoving(autoProgress.current < 1);
+        updateMoving(autoProgress.current < 1);
 
-        if (lastPosition.current.distanceToSquared(ref.current.position) > 0.0001) {
+        if (lastPosition.current.distanceToSquared(ref.current.position) > 0.12) {
           lastPosition.current.copy(ref.current.position);
           onPositionChange?.([
             ref.current.position.x,
@@ -117,7 +125,7 @@ export const PlayerController = forwardRef<THREE.Group, PlayerProps>(
       }
 
       const isMoving = moveInput !== 0 || turnInput !== 0;
-      setMoving(isMoving);
+      updateMoving(isMoving);
 
       if (moveInput !== 0) {
         const currentSpeed = speed * (input.sprint ? 1.75 : 1) * moveInput;
@@ -150,7 +158,7 @@ export const PlayerController = forwardRef<THREE.Group, PlayerProps>(
         autoProgress.current = info.t;
       }
 
-      if (lastPosition.current.distanceToSquared(ref.current.position) > 0.0001) {
+      if (lastPosition.current.distanceToSquared(ref.current.position) > 0.12) {
         lastPosition.current.copy(ref.current.position);
         onPositionChange?.([
           ref.current.position.x,

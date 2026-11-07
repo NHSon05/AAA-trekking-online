@@ -138,6 +138,11 @@ export const SCENIC_PULLOUT_FRACTIONS = [
 let cachedRoadCurve: THREE.CatmullRomCurve3 | null = null;
 let cachedTrailCurve: THREE.CatmullRomCurve3 | null = null;
 let cachedSampledPoints: THREE.Vector3[] | null = null;
+let cachedTrailSamples: THREE.Vector3[] | null = null;
+
+// Spatial grid for O(1) closest road point queries
+const GRID_CELL = 14;
+let roadSpatialGrid: Map<string, number[]> | null = null;
 
 export function getRoadCurve(): THREE.CatmullRomCurve3 {
   if (!cachedRoadCurve) {
@@ -179,9 +184,26 @@ export function getBanyanTrailCurve(): THREE.CatmullRomCurve3 {
   return cachedTrailCurve;
 }
 
-export function getSampledRoadPoints(divisions = 480): THREE.Vector3[] {
+export function getSampledRoadPoints(divisions = 240): THREE.Vector3[] {
   if (!cachedSampledPoints) {
     cachedSampledPoints = getRoadCurve().getSpacedPoints(divisions);
+    roadSpatialGrid = new Map();
+    for (let i = 0; i < cachedSampledPoints.length; i++) {
+      const p = cachedSampledPoints[i];
+      const gx = Math.floor(p.x / GRID_CELL);
+      const gz = Math.floor(p.z / GRID_CELL);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const key = `${gx + dx},${gz + dz}`;
+          let bucket = roadSpatialGrid.get(key);
+          if (!bucket) {
+            bucket = [];
+            roadSpatialGrid.set(key, bucket);
+          }
+          bucket.push(i);
+        }
+      }
+    }
   }
   return cachedSampledPoints;
 }
@@ -189,23 +211,42 @@ export function getSampledRoadPoints(divisions = 480): THREE.Vector3[] {
 /**
  * Finds the closest point on the main roadline to (x, z), returning its elevation,
  * horizontal distance, and normalized progress t in [0, 1].
+ * Uses a spatial hash grid for fast lookup when within ~20m of the road.
  */
 export function getClosestRoadInfo(x: number, z: number): {
   point: THREE.Vector3;
   distance: number;
   t: number;
 } {
-  const samples = getSampledRoadPoints(480);
+  const samples = getSampledRoadPoints(240);
+  const gx = Math.floor(x / GRID_CELL);
+  const gz = Math.floor(z / GRID_CELL);
+  const candidates = roadSpatialGrid?.get(`${gx},${gz}`);
+
   let bestIdx = 0;
   let bestDistSq = Infinity;
 
-  for (let i = 0; i < samples.length; i++) {
-    const dx = samples[i].x - x;
-    const dz = samples[i].z - z;
-    const dSq = dx * dx + dz * dz;
-    if (dSq < bestDistSq) {
-      bestDistSq = dSq;
-      bestIdx = i;
+  if (candidates && candidates.length > 0) {
+    for (let k = 0; k < candidates.length; k++) {
+      const i = candidates[k];
+      const dx = samples[i].x - x;
+      const dz = samples[i].z - z;
+      const dSq = dx * dx + dz * dz;
+      if (dSq < bestDistSq) {
+        bestDistSq = dSq;
+        bestIdx = i;
+      }
+    }
+  } else {
+    // Coarse step scan for far-off-road points
+    for (let i = 0; i < samples.length; i += 3) {
+      const dx = samples[i].x - x;
+      const dz = samples[i].z - z;
+      const dSq = dx * dx + dz * dz;
+      if (dSq < bestDistSq) {
+        bestDistSq = dSq;
+        bestIdx = i;
+      }
     }
   }
 
@@ -263,24 +304,28 @@ export function getTerrainHeight(x: number, z: number): number {
     );
   }
 
-  // Also blend with the Banyan forest spur trail
-  const trailSamples = getBanyanTrailCurve().getSpacedPoints(40);
-  let minTrailDistSq = Infinity;
-  let trailY = naturalHeight;
-  for (let i = 0; i < trailSamples.length; i++) {
-    const dx = trailSamples[i].x - x;
-    const dz = trailSamples[i].z - z;
-    const dSq = dx * dx + dz * dz;
-    if (dSq < minTrailDistSq) {
-      minTrailDistSq = dSq;
-      trailY = trailSamples[i].y;
+  // Also blend with the Banyan forest spur trail (only check when near the Banyan bounding box)
+  if (x < BANYAN_ANCHOR[0] + 6 && x > BANYAN_ANCHOR[0] - 32 && Math.abs(z - BANYAN_ANCHOR[2]) < 16) {
+    if (!cachedTrailSamples) {
+      cachedTrailSamples = getBanyanTrailCurve().getSpacedPoints(24);
     }
-  }
-  const trailDist = Math.sqrt(minTrailDistSq);
-  if (trailDist < 5.5) {
-    const alpha = Math.max(0, (trailDist - 1.8) / (5.5 - 1.8));
-    const smooth = alpha * alpha * (3 - 2 * alpha);
-    naturalHeight = THREE.MathUtils.lerp(trailY, naturalHeight, smooth);
+    let minTrailDistSq = Infinity;
+    let trailY = naturalHeight;
+    for (let i = 0; i < cachedTrailSamples.length; i++) {
+      const dx = cachedTrailSamples[i].x - x;
+      const dz = cachedTrailSamples[i].z - z;
+      const dSq = dx * dx + dz * dz;
+      if (dSq < minTrailDistSq) {
+        minTrailDistSq = dSq;
+        trailY = cachedTrailSamples[i].y;
+      }
+    }
+    const trailDist = Math.sqrt(minTrailDistSq);
+    if (trailDist < 5.5) {
+      const alpha = Math.max(0, (trailDist - 1.8) / (5.5 - 1.8));
+      const smooth = alpha * alpha * (3 - 2 * alpha);
+      naturalHeight = THREE.MathUtils.lerp(trailY, naturalHeight, smooth);
+    }
   }
 
   return naturalHeight;

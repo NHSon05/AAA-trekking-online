@@ -27,6 +27,8 @@ const StaticTrees = memo(ForestTrees);
 const StaticBackdrop = memo(ForestBackdrop);
 const StaticRoadside = memo(RoadsideDetails);
 const StaticGrass = memo(RoadsideGrass);
+const StaticVehicles = memo(RoadsideVehicles);
+const MemoLandmarks = memo(SonTraLandmarks);
 
 export function SonTraRoadline({
   activeLandmarkId,
@@ -53,9 +55,9 @@ export function SonTraRoadline({
         <StaticRoadside />
         <StaticGrass />
         <WildlifeZone playerPosition={playerPosition} playing={monkeyPlaying} approachPlayer={monkeysApproach} />
-        <RoadsideVehicles />
+        <StaticVehicles />
       </Suspense>
-      <SonTraLandmarks
+      <MemoLandmarks
         activeLandmarkId={activeLandmarkId}
         discoveredIds={discoveredIds}
         onSelectLandmark={onSelectLandmark}

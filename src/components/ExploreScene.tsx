@@ -142,6 +142,8 @@ export function ExploreScene() {
       <Canvas
         className="scene-canvas"
         shadows
+        dpr={[1, 1.5]}
+        gl={{ powerPreference: "high-performance", antialias: true }}
         camera={{ position: [0, 4, 70], fov: 55, near: 0.1, far: 900 }}
       >
         <color attach="background" args={[isNight ? "#07111e" : "#9bc8d4"]} />
@@ -163,7 +165,7 @@ export function ExploreScene() {
           castShadow
           position={[45, 65, 35]}
           intensity={isNight ? 0.22 : 2.6}
-          shadow-mapSize={[2048, 2048]}
+          shadow-mapSize={[1024, 1024]}
           shadow-camera-left={-90}
           shadow-camera-right={90}
           shadow-camera-top={110}
