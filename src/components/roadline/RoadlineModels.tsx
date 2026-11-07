@@ -2,14 +2,32 @@
 
 import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import {
   getBanyanTrailCurve,
   getClosestRoadInfo,
   getRoadCurve,
+  getRouteFrame,
   getTerrainHeight,
+  MONKEY_TERRITORIES,
+  SON_TRA_LANDMARKS,
 } from "./roadData";
+
+function nearLandmark(x: number, z: number, id: string, r: number) {
+  const lm = SON_TRA_LANDMARKS.find((l) => l.id === id);
+  return !!lm && Math.hypot(x - lm.position[0], z - lm.position[2]) < r;
+}
+
+function nearScenicPullout(x: number, z: number, radius: number) {
+  return [0.07, 0.19, 0.31, 0.43, 0.56, 0.69, 0.82, 0.94].some((progress, index) => {
+    const frame = getRouteFrame(progress);
+    const direction = index % 2 === 0 ? 1 : -1;
+    const centerX = frame.point.x + frame.side.x * 7.2 * direction;
+    const centerZ = frame.point.z + frame.side.z * 7.2 * direction;
+    return Math.hypot(x - centerX, z - centerZ) < radius;
+  });
+}
 
 const MODEL_PATHS = {
   roadBlock: "/models/Road block by Luca Regazzi (okon3) - e3QRTZLNQU5.glb",
@@ -66,155 +84,143 @@ function seededRandom(seed: number): number {
  * and Vietnam-style red-and-white kilometer milestones along the climb.
  */
 export function RoadSegments() {
-  const roadGltf = useGLTF(MODEL_PATHS.roadBlock);
-
-  // Compute transformations for each 3D Road Block model along the Son Tra roadline curve
-  const segments = useMemo(() => {
+  // Continuous ribbon meshes (asphalt, edge lines, centre dashes, kerbs) that follow the curve exactly,
+  // so tight hairpins never open gaps like rigid straight road blocks do.
+  const { asphalt, edgeLines, dashes, kerbs, milestones } = useMemo(() => {
     const curve = getRoadCurve();
-    const totalLength = curve.getLength();
-    // Each Road Block is ~0.67 units long in local X; at scale 5.4 it covers ~3.55m
-    const segmentSpacing = 3.35;
-    const count = Math.floor(totalLength / segmentSpacing);
-    const items: {
-      position: [number, number, number];
-      quaternion: THREE.Quaternion;
-      isMilestone: boolean;
-      kmLabel: number;
-    }[] = [];
-
+    const length = curve.getLength();
+    const perStep = 0.5;
+    const samples = curve.getSpacedPoints(Math.ceil(length / perStep));
     const up = new THREE.Vector3(0, 1, 0);
-    const dummy = new THREE.Object3D();
-
-    for (let i = 0; i <= count; i++) {
-      const u = i / count;
-      const point = curve.getPointAt(u);
-      const tangent = curve.getTangentAt(u).normalize();
-
-      dummy.position.copy(point);
-      dummy.up.copy(up);
-      dummy.lookAt(point.clone().add(tangent));
-
-      items.push({
-        position: [point.x, point.y + 0.04, point.z],
-        quaternion: dummy.quaternion.clone(),
-        isMilestone: i > 0 && i % 10 === 0,
-        kmLabel: Math.round(u * 10),
-      });
-    }
-    return items;
-  }, []);
-
-  // Clone a clean prototype of the Road Block GLB where local +Z is forward along the road
-  const roadPrototype = useMemo(() => {
-    const wrapper = new THREE.Group();
-    const clone = roadGltf.scene.clone(true);
-    clone.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
+    const sides = samples.map((p, i) => {
+      const a = samples[Math.max(0, i - 1)];
+      const b = samples[Math.min(samples.length - 1, i + 1)];
+      const t = b.clone().sub(a).setY(0).normalize();
+      return new THREE.Vector3().crossVectors(t, up).normalize();
     });
-    // In the GLB, the road direction (dashed line & curbs) runs along local X.
-    // Rotate +90 deg around Y so local +Z aligns with lookAt(tangent).
-    clone.rotation.set(0, Math.PI / 2, 0);
-    clone.scale.set(5.4, 5.0, 5.8);
-    wrapper.add(clone);
-    return wrapper;
-  }, [roadGltf]);
 
-  // Continuous roadbed ribbon under the 3D road blocks so steep curves have zero gaps
-  const roadbedGeometry = useMemo(() => {
-    const curve = getRoadCurve();
-    const points = curve.getSpacedPoints(220);
-    const halfWidth = 2.35;
-    const positions: number[] = [];
-    const indices: number[] = [];
-    const up = new THREE.Vector3(0, 1, 0);
-
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i];
-      const tangent =
-        i < points.length - 1
-          ? points[i + 1].clone().sub(p).normalize()
-          : p.clone().sub(points[i - 1]).normalize();
-      const side = new THREE.Vector3().crossVectors(tangent, up).normalize();
-
-      const left = p.clone().addScaledVector(side, -halfWidth);
-      const right = p.clone().addScaledVector(side, halfWidth);
-
-      positions.push(left.x, left.y - 0.03, left.z);
-      positions.push(right.x, right.y - 0.03, right.z);
-
-      if (i < points.length - 1) {
-        const base = i * 2;
-        indices.push(base, base + 1, base + 2);
-        indices.push(base + 1, base + 3, base + 2);
+    const strip = (from: number, to: number, lift: number, startIdx = 0, endIdx = samples.length - 1) => {
+      const pos: number[] = [];
+      const idx: number[] = [];
+      let n = 0;
+      for (let i = startIdx; i <= endIdx; i++) {
+        const p = samples[i];
+        const s = sides[i];
+        pos.push(p.x + s.x * from, p.y + lift, p.z + s.z * from, p.x + s.x * to, p.y + lift, p.z + s.z * to);
+        if (i < endIdx) idx.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
+        n += 2;
       }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      return g;
+    };
+
+    // Raised kerb: a 4-sided tube strip along one road edge
+    const kerb = (side: number) => {
+      const inner = side * 2.45;
+      const outer = side * 2.73;
+      const pos: number[] = [];
+      const idx: number[] = [];
+      let n = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const p = samples[i];
+        const s = sides[i];
+        const y0 = p.y - 0.02;
+        const y1 = p.y + 0.16;
+        pos.push(
+          p.x + s.x * inner, y0, p.z + s.z * inner,
+          p.x + s.x * inner, y1, p.z + s.z * inner,
+          p.x + s.x * outer, y1, p.z + s.z * outer,
+          p.x + s.x * outer, y0, p.z + s.z * outer
+        );
+        if (i < samples.length - 1) {
+          for (let k = 0; k < 4; k++) {
+            const a = n + k;
+            const b = n + ((k + 1) % 4);
+            idx.push(a, b, a + 4, b, b + 4, a + 4);
+          }
+        }
+        n += 4;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      return g;
+    };
+
+    // Dashed centre line: 2 m dash, 2 m gap
+    const dashGeos: THREE.BufferGeometry[] = [];
+    const dashLen = Math.round(2 / perStep);
+    for (let i = 0; i + dashLen < samples.length; i += dashLen * 2) {
+      dashGeos.push(strip(-0.08, 0.08, 0.055, i, i + dashLen));
     }
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
-    return geo;
+    const kms: { p: THREE.Vector3; s: THREE.Vector3 }[] = [];
+    const kmStep = Math.round(36.36 / perStep);
+    for (let i = kmStep; i < samples.length - 10; i += kmStep) kms.push({ p: samples[i], s: sides[i] });
+
+    return {
+      asphalt: strip(-2.45, 2.45, 0.03),
+      edgeLines: [strip(-2.25, -2.13, 0.05), strip(2.13, 2.25, 0.05)],
+      dashes: mergeStrips(dashGeos),
+      kerbs: [kerb(-1), kerb(1)],
+      milestones: kms,
+    };
   }, []);
 
   // Stepping trail segments for the Ancient Banyan forest trail spur
   const trailSteps = useMemo(() => {
     const trailCurve = getBanyanTrailCurve();
     const count = 26;
-    const steps: {
-      position: [number, number, number];
-      rotationY: number;
-    }[] = [];
-
+    const steps: { position: [number, number, number]; rotationY: number }[] = [];
     for (let i = 1; i <= count; i++) {
       const u = i / count;
       const pt = trailCurve.getPointAt(u);
       const tan = trailCurve.getTangentAt(u);
-      steps.push({
-        position: [pt.x, pt.y + 0.03, pt.z],
-        rotationY: Math.atan2(tan.x, tan.z),
-      });
+      steps.push({ position: [pt.x, pt.y + 0.03, pt.z], rotationY: Math.atan2(tan.x, tan.z) });
     }
     return steps;
   }, []);
 
   return (
     <group name="SonTraRoadline">
-      {/* Continuous dark-stone mountain roadbed base */}
-      <mesh geometry={roadbedGeometry} receiveShadow>
-        <meshStandardMaterial color="#2b3135" roughness={0.92} />
+      <mesh geometry={asphalt} receiveShadow>
+        <meshStandardMaterial color="#3a3f44" roughness={0.92} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} />
       </mesh>
+      {edgeLines.map((g, i) => (
+        <mesh key={i} geometry={g}>
+          <meshStandardMaterial color="#f1f1ea" roughness={0.7} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-4} />
+        </mesh>
+      ))}
+      <mesh geometry={dashes}>
+        <meshStandardMaterial color="#f2d64b" roughness={0.7} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-4} />
+      </mesh>
+      {kerbs.map((g, i) => (
+        <mesh key={i} geometry={g} castShadow receiveShadow>
+          <meshStandardMaterial color="#cfd2cc" roughness={0.8} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
 
-      {/* 3D Road Block models placed along the entire curve */}
-      {segments.map((seg, idx) => (
-        <group key={idx} position={seg.position} quaternion={seg.quaternion}>
-          <primitive object={roadPrototype.clone(true)} />
-
-          {/* Roadside Vietnamese mountain pass milestone post & guardrail on outer curves */}
-          {seg.isMilestone && (
-            <group position={[2.45, 0, 0]}>
-              <mesh position={[0, 0.38, 0]} castShadow receiveShadow>
-                <boxGeometry args={[0.26, 0.76, 0.26]} />
-                <meshStandardMaterial color="#f2f4f0" roughness={0.6} />
-              </mesh>
-              <mesh position={[0, 0.68, 0]} castShadow>
-                <boxGeometry args={[0.27, 0.22, 0.27]} />
-                <meshStandardMaterial color="#c9332b" roughness={0.5} />
-              </mesh>
-            </group>
-          )}
+      {/* Red-and-white kilometre posts every real kilometre */}
+      {milestones.map((m, i) => (
+        <group key={i} position={[m.p.x + m.s.x * 3.1, m.p.y, m.p.z + m.s.z * 3.1]}>
+          <mesh position={[0, 0.38, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.26, 0.76, 0.26]} />
+            <meshStandardMaterial color="#f2f4f0" roughness={0.6} />
+          </mesh>
+          <mesh position={[0, 0.68, 0]} castShadow>
+            <boxGeometry args={[0.27, 0.22, 0.27]} />
+            <meshStandardMaterial color="#c9332b" roughness={0.5} />
+          </mesh>
         </group>
       ))}
 
       {/* Secondary Dirt & Stone Trekking Trail to the Ancient Banyan Tree */}
       {trailSteps.map((step, idx) => (
-        <group
-          key={`trail-${idx}`}
-          position={step.position}
-          rotation={[0, step.rotationY, 0]}
-        >
+        <group key={`trail-${idx}`} position={step.position} rotation={[0, step.rotationY, 0]}>
           <mesh receiveShadow castShadow position={[0, 0.02, 0]}>
             <cylinderGeometry args={[0.95, 1.05, 0.08, 7]} />
             <meshStandardMaterial color="#7b6853" roughness={0.95} />
@@ -223,6 +229,24 @@ export function RoadSegments() {
       ))}
     </group>
   );
+}
+
+function mergeStrips(geos: THREE.BufferGeometry[]) {
+  const pos: number[] = [];
+  const idx: number[] = [];
+  let offset = 0;
+  for (const g of geos) {
+    const p = g.attributes.position.array;
+    for (let i = 0; i < p.length; i++) pos.push(p[i]);
+    const ix = g.index!.array;
+    for (let i = 0; i < ix.length; i++) idx.push(ix[i] + offset);
+    offset += p.length / 3;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  out.setIndex(idx);
+  out.computeVertexNormals();
+  return out;
 }
 
 /**
@@ -306,7 +330,8 @@ export function ForestTrees() {
       const wz = pt.z + side.z * sideSign * offsetDist;
 
       // Keep clear of the Banyan spur trail and summit platform
-      if (Math.hypot(wx - -10, wz - -94) < 8) continue;
+      if (nearLandmark(wx, wz, "ban-co-peak", 8)) continue;
+      if (nearScenicPullout(wx, wz, 5.5)) continue;
 
       const wy = getTerrainHeight(wx, wz);
       placements.push({
@@ -318,19 +343,20 @@ export function ForestTrees() {
     }
 
     // B. Deeper mountain forest canopy clusters across the peninsula
-    const forestCount = 95;
+    const forestCount = 170;
     for (let i = 0; i < forestCount; i++) {
       const seed = i + 200;
-      const wx = (seededRandom(seed * 11) - 0.52) * 115;
-      const wz = (seededRandom(seed * 19) - 0.58) * 165;
+      const wx = (seededRandom(seed * 11) - 0.5) * 165 - 6;
+      const wz = (seededRandom(seed * 19) - 0.5) * 140 - 5;
 
       // Don't place trees in the ocean (East/South-East) or directly on the roadbed
-      if (wx > 31 || wz > 70) continue;
+      if (wx > 78 || wz > 70) continue;
       const roadInfo = getClosestRoadInfo(wx, wz);
       if (roadInfo.distance < 4.0) continue;
-      if (Math.hypot(wx - -40, wz - -55) < 7.5) continue; // Keep Banyan clearing open
-      if (Math.hypot(wx - -10, wz - -94) < 8.5) continue; // Keep Ban Co Peak open
-      if (Math.hypot(wx - 22, wz - 20) < 7.0) continue;   // Keep Linh Ung overlook open
+      if (nearLandmark(wx, wz, "banyan-tree", 7.5)) continue; // Keep Banyan clearing open
+      if (nearLandmark(wx, wz, "ban-co-peak", 8.5)) continue; // Keep Ban Co Peak open
+      if (nearLandmark(wx, wz, "linh-ung", 7)) continue;      // Keep Linh Ung overlook open
+      if (nearScenicPullout(wx, wz, 5.5)) continue;
 
       const wy = getTerrainHeight(wx, wz);
       if (wy < -0.2) continue;
@@ -453,12 +479,17 @@ export function RoadsideGrass() {
  * Places the 3D Primate models ("Baboon by Poly by Google") at the Son Tra Primate Sanctuary
  * along the mid-mountain curve, perched on natural rocks and observing from a safe distance.
  */
-export function WildlifeZone() {
+export function WildlifeZone({
+  playerPosition,
+  playing,
+  approachPlayer,
+}: {
+  playerPosition: [number, number, number];
+  playing: boolean;
+  approachPlayer: boolean;
+}) {
   const wukongGltf = useGLTF(MODEL_PATHS.monkeyWukong);
   const monkeyGltf = useGLTF(MODEL_PATHS.monkey);
-  const groupRef = useRef<THREE.Group>(null);
-
-  // Index 0 = Sun Wukong monkey king (1.1 m), index 1 = regular monkey (0.8 m)
   const primates = useMemo(
     () => [
       normalizeModel(wukongGltf.scene, 1.1),
@@ -466,47 +497,206 @@ export function WildlifeZone() {
     ],
     [wukongGltf, monkeyGltf]
   );
+  const sites = useMemo(() => MONKEY_TERRITORIES.map((territory) => {
+    const landmark = SON_TRA_LANDMARKS.find(({ id }) => id === territory.landmarkId)!;
+    const x = landmark.position[0] + territory.offset[0];
+    const z = landmark.position[2] + territory.offset[2];
+    return { center: [x, getTerrainHeight(x, z), z] as [number, number, number] };
+  }), []);
+  const nearestSite = sites.reduce((best, site, index) => {
+    const distance = Math.hypot(playerPosition[0] - site.center[0], playerPosition[2] - site.center[2]);
+    return distance < best.distance ? { index, distance } : best;
+  }, { index: 0, distance: Number.POSITIVE_INFINITY });
 
-  const troop = useMemo(() => {
-    const spots: {
-      pos: [number, number, number];
-      rotY: number;
-      rockScale: [number, number, number];
-      phase: number;
-    }[] = [
-      { pos: [-20.2, getTerrainHeight(-20.2, -14.5), -14.5], rotY: 0.9, rockScale: [1.3, 0.7, 1.1], phase: 0 },
-      { pos: [-12.0, getTerrainHeight(-12.0, -18.2), -18.2], rotY: -1.8, rockScale: [1.1, 0.55, 0.9], phase: 2.1 },
-      { pos: [-22.5, getTerrainHeight(-22.5, -22.0), -22.0], rotY: 0.4, rockScale: [1.5, 0.85, 1.3], phase: 4.2 },
-    ];
-    return spots;
-  }, []);
+  return (
+    <group name="SonTraMonkeyAreas">
+      {sites.map((site, index) => (
+        <MonkeyTroop
+          key={index}
+          center={site.center}
+          primates={primates}
+          playerPosition={playerPosition}
+          playing={playing && nearestSite.index === index}
+          approachPlayer={approachPlayer && nearestSite.index === index}
+        />
+      ))}
+    </group>
+  );
+}
 
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
+function MonkeyTroop({
+  center,
+  primates,
+  playerPosition,
+  playing,
+  approachPlayer,
+}: {
+  center: [number, number, number];
+  primates: THREE.Group[];
+  playerPosition: [number, number, number];
+  playing: boolean;
+  approachPlayer: boolean;
+}) {
+  const actorRefs = useRef<(THREE.Group | null)[]>([]);
+  const targetRefs = useRef<THREE.Vector3[]>([]);
+  const nextWanderAt = useRef<number[]>([]);
+  const animals = useMemo(() => Array.from({ length: 5 }, (_, index) => {
+    const angle = (index / 5) * Math.PI * 2 + 0.3;
+    const radius = index === 0 ? 1.5 : 2.8 + (index % 2) * 1.3;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    return {
+      offset: [x, getTerrainHeight(center[0] + x, center[2] + z) - center[1], z] as [number, number, number],
+      rockScale: [0.85 + (index % 3) * 0.18, 0.5 + (index % 2) * 0.16, 0.8 + (index % 2) * 0.2] as [number, number, number],
+    };
+  }), [center]);
+
+  useEffect(() => {
+    targetRefs.current = animals.map(({ offset }) => new THREE.Vector3(...offset));
+    nextWanderAt.current = animals.map(() => 0);
+  }, [animals]);
+
+  useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime();
-    groupRef.current.children.forEach((child, idx) => {
-      const primate = child.getObjectByName("PrimateActor");
-      if (primate) {
-        primate.rotation.y = Math.sin(t * 1.1 + idx * 1.7) * 0.28;
-        primate.position.y = 0.42 + Math.abs(Math.sin(t * 1.6 + idx)) * 0.04;
+    animals.forEach((animal, idx) => {
+      const actor = actorRefs.current[idx];
+      const target = targetRefs.current[idx];
+      if (!actor || !target) return;
+
+      if (playing && idx === 0) {
+        const angle = t * 0.9;
+        const worldX = playerPosition[0] + Math.cos(angle) * 2.7;
+        const worldZ = playerPosition[2] + Math.sin(angle) * 2.7;
+        target.set(worldX - center[0], getTerrainHeight(worldX, worldZ) - center[1], worldZ - center[2]);
+      } else if (approachPlayer && idx === 0) {
+        const dx = playerPosition[0] - center[0];
+        const dz = playerPosition[2] - center[2];
+        const length = Math.hypot(dx, dz) || 1;
+        const worldX = playerPosition[0] - (dx / length) * 2.8;
+        const worldZ = playerPosition[2] - (dz / length) * 2.8;
+        target.set(worldX - center[0], getTerrainHeight(worldX, worldZ) - center[1], worldZ - center[2]);
+      } else if (t >= nextWanderAt.current[idx]) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 1.2 + Math.random() * 3.2;
+        const worldX = center[0] + animal.offset[0] + Math.cos(angle) * radius;
+        const worldZ = center[2] + animal.offset[2] + Math.sin(angle) * radius;
+        target.set(worldX - center[0], getTerrainHeight(worldX, worldZ) - center[1], worldZ - center[2]);
+        nextWanderAt.current[idx] = t + 3 + Math.random() * 4;
+      }
+
+      const oldX = actor.position.x;
+      const oldZ = actor.position.z;
+      actor.position.x = THREE.MathUtils.damp(oldX, target.x, playing && idx === 0 ? 2.2 : 0.9, delta);
+      actor.position.z = THREE.MathUtils.damp(oldZ, target.z, playing && idx === 0 ? 2.2 : 0.9, delta);
+      actor.position.y = THREE.MathUtils.damp(actor.position.y, target.y, 2.2, delta);
+      const moved = Math.hypot(actor.position.x - oldX, actor.position.z - oldZ);
+      if (moved > 0.0001) actor.rotation.y = Math.atan2(actor.position.x - oldX, actor.position.z - oldZ);
+      const model = actor.getObjectByName("PrimateModel");
+      if (model) {
+        const playful = playing && idx === 0;
+        const speed = playful ? 8 : moved > 0.003 ? 5 : 1.2;
+        model.position.y = 0.42 + Math.abs(Math.sin(t * speed + idx)) * (playful ? 0.22 : moved > 0.003 ? 0.09 : 0.025);
+        model.rotation.z = Math.sin(t * speed * 0.5 + idx) * (playful ? 0.12 : 0.04);
       }
     });
   });
 
   return (
-    <group ref={groupRef} name="SonTraWildlifeSanctuary">
-      {troop.map((item, idx) => (
-        <group key={idx} position={item.pos} rotation={[0, item.rotY, 0]}>
-          {/* Natural forest boulder perch */}
-          <mesh position={[0, 0.22, 0]} scale={item.rockScale} castShadow receiveShadow>
+    <group position={center}>
+      {animals.map((animal, index) => (
+        <group key={`rock-${index}`} position={animal.offset}>
+          <mesh position={[0, 0.22, 0]} scale={animal.rockScale} castShadow receiveShadow>
             <dodecahedronGeometry args={[0.6, 1]} />
             <meshStandardMaterial color="#676d66" roughness={0.9} />
           </mesh>
-          <group name="PrimateActor" position={[0, 0.42, 0]}>
-            <primitive object={primates[idx === 0 ? 0 : 1].clone(true)} />
+        </group>
+      ))}
+      {animals.map((animal, index) => (
+        <group key={`monkey-${index}`} ref={(node) => { actorRefs.current[index] = node; }} position={animal.offset}>
+          <group name="PrimateModel" position={[0, 0.42, 0]}>
+            <primitive object={primates[index === 0 ? 0 : 1].clone(true)} />
           </group>
         </group>
       ))}
+    </group>
+  );
+}
+
+/** Roadside viewpoints populated with downloaded scooters and small sightseeing groups. */
+export function RoadsideVehicles() {
+  const motivaGltf = useGLTF("/models/moto_motiva.glb");
+  const vespaGltf = useGLTF("/models/moto_vespa.glb");
+  const stops = useMemo(() => [0.07, 0.19, 0.31, 0.43, 0.56, 0.69, 0.82, 0.94].map((progress, index) => {
+    const frame = getRouteFrame(progress);
+    const direction = index % 2 === 0 ? 1 : -1;
+    const side = frame.side.clone().multiplyScalar(7.2 * direction);
+    const x = frame.point.x + side.x;
+    const z = frame.point.z + side.z;
+    return {
+      id: index,
+      position: [x, getTerrainHeight(x, z), z] as [number, number, number],
+      facing: Math.atan2(side.x, side.z),
+      roadFacing: Math.atan2(frame.tangent.x, frame.tangent.z),
+      tangent: frame.tangent,
+      side: frame.side.clone().multiplyScalar(direction),
+      vehicleCount: index % 3 === 0 ? 3 : 2,
+    };
+  }), []);
+  const scooters = useMemo(() => [motivaGltf.scene, vespaGltf.scene].map((scene) => normalizeModel(scene, 2.35)), [motivaGltf, vespaGltf]);
+
+  return (
+    <group name="ScenicRoadsideStops">
+      {stops.map((stop) => (
+        <group key={stop.id} name={`Viewpoint-${stop.id}`} position={stop.position}>
+          {Array.from({ length: stop.vehicleCount }, (_, index) => {
+            const along = (index - (stop.vehicleCount - 1) / 2) * 1.85;
+            const sideDistance = 1.1 + (index % 2) * 0.7;
+            const x = stop.tangent.x * along + stop.side.x * sideDistance;
+            const z = stop.tangent.z * along + stop.side.z * sideDistance;
+            const worldX = stop.position[0] + x;
+            const worldZ = stop.position[2] + z;
+            return (
+              <group key={index} position={[x, getTerrainHeight(worldX, worldZ) - stop.position[1], z]} rotation={[0, stop.roadFacing + Math.PI / 2, 0]}>
+                <primitive object={scooters[(index + stop.id) % scooters.length].clone(true)} />
+                <mesh position={[0, 0.12, 0.35]}><boxGeometry args={[0.46, 0.04, 0.025]} /><meshStandardMaterial color={stop.id % 2 ? "#31c48d" : "#52d4ba"} emissive="#0b7652" emissiveIntensity={0.4} /></mesh>
+              </group>
+            );
+          })}
+          {Array.from({ length: stop.id % 2 === 0 ? 4 : 3 }, (_, index) => {
+            const along = 3.2 + index * 0.85;
+            const sideDistance = 2.1 + (index % 2) * 0.75;
+            const x = stop.tangent.x * along + stop.side.x * sideDistance;
+            const z = stop.tangent.z * along + stop.side.z * sideDistance;
+            const worldX = stop.position[0] + x;
+            const worldZ = stop.position[2] + z;
+            const shirts = ["#e7e2d6", "#397862", "#d49b55", "#718db0"];
+            return (
+              <group key={`visitor-${index}`} position={[x, getTerrainHeight(worldX, worldZ) - stop.position[1], z]} rotation={[0, stop.facing + (index - 1) * 0.12, 0]}>
+                <SightseeingVisitor shirt={shirts[(index + stop.id) % shirts.length]} pose={index % 2 === 0 ? "camera" : "point"} />
+              </group>
+            );
+          })}
+          <mesh position={[stop.side.x * 3.5, 0.75, stop.side.z * 3.5]} rotation={[0, stop.facing, 0]} castShadow>
+            <boxGeometry args={[5.4, 0.12, 0.16]} /><meshStandardMaterial color="#71593d" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function SightseeingVisitor({ shirt, pose }: { shirt: string; pose: "camera" | "point" }) {
+  return (
+    <group>
+      <mesh position={[0, 1.08, 0]} castShadow><capsuleGeometry args={[0.23, 0.62, 5, 9]} /><meshStandardMaterial color={shirt} roughness={0.78} /></mesh>
+      <mesh position={[0, 1.69, 0]} castShadow><sphereGeometry args={[0.19, 12, 10]} /><meshStandardMaterial color="#c99272" roughness={0.75} /></mesh>
+      <mesh position={[0, 1.86, 0]} castShadow><cylinderGeometry args={[0.24, 0.29, 0.1, 12]} /><meshStandardMaterial color="#30383a" roughness={0.8} /></mesh>
+      {[-0.12, 0.12].map((x) => <mesh key={x} position={[x, 0.36, 0]} castShadow><capsuleGeometry args={[0.085, 0.5, 4, 7]} /><meshStandardMaterial color="#343e44" roughness={0.85} /></mesh>)}
+      <mesh position={[-0.29, 1.08, -0.13]} castShadow><boxGeometry args={[0.16, 0.4, 0.3]} /><meshStandardMaterial color="#a65532" roughness={0.85} /></mesh>
+      {pose === "camera" ? <>
+        <mesh position={[0.24, 1.42, 0.28]} rotation={[0.25, 0.1, -0.55]}><capsuleGeometry args={[0.055, 0.38, 4, 7]} /><meshStandardMaterial color="#c99272" /></mesh>
+        <mesh position={[0.22, 1.52, 0.42]}><boxGeometry args={[0.18, 0.12, 0.1]} /><meshStandardMaterial color="#263b3b" metalness={0.45} /></mesh>
+      </> : <mesh position={[0.3, 1.3, 0.25]} rotation={[0.1, 0, -1.1]}><capsuleGeometry args={[0.055, 0.5, 4, 7]} /><meshStandardMaterial color="#c99272" /></mesh>}
     </group>
   );
 }
@@ -517,12 +707,15 @@ export function WildlifeZone() {
 export function ForestBackdrop() {
   const gltf = useGLTF(MODEL_PATHS.forest);
   const proto = useMemo(() => normalizeModel(gltf.scene, 34, "xz"), [gltf]);
-  const spots: [number, number, number][] = [
-    [-45, 0, -10],
-    [45, 0, -40],
-    [-40, 0, -70],
-    [40, 0, 20],
-  ];
+  // Pick 4 spread-out land spots at least 30 m from the road
+  const spots = useMemo(() => {
+    const out: [number, number, number][] = [];
+    for (const [x, z] of [[-60, -60], [60, -50], [-70, 10], [20, 60], [60, 40], [-20, -90], [0, -70]]) {
+      if (getClosestRoadInfo(x, z).distance > 30 && getTerrainHeight(x, z) > 0.5) out.push([x, 0, z]);
+      if (out.length === 4) break;
+    }
+    return out;
+  }, []);
   return (
     <group name="SonTraForestBackdrop">
       {spots.map(([x, , z], i) => (

@@ -127,7 +127,7 @@ button {
 }
 
 .hud__minimap {
-  width: 155px;
+  width: min(340px, 34vw);
   padding: 10px;
 }
 
@@ -140,6 +140,22 @@ button {
   color: #b7d5ad;
   margin-bottom: 6px;
 }
+
+.hud__map-toggle {
+  cursor: pointer;
+  border: 1px solid rgba(134,239,172,.4);
+  border-radius: 6px;
+  padding: 3px 6px;
+  color: #e7fff0;
+  background: rgba(47,133,90,.55);
+  font: inherit;
+  font-size: 9px;
+}
+.hud__minimap-progress { margin: 0 0 5px; color: #a7c7b2; font-size: 10px; }
+.hud__osm-map { display: flex; flex-direction: column; gap: 5px; }
+.hud__osm-map iframe { width: 100%; height: min(300px, 36vh); border: 0; border-radius: 8px; background: #e6e3d8; }
+.hud__osm-map a { align-self: flex-end; color: #a7d7b8; font-size: 10px; text-decoration: none; }
+.hud__osm-map a:hover { text-decoration: underline; }
 
 .hud__minimap-svg {
   width: 100%;
@@ -322,6 +338,17 @@ button {
   background: linear-gradient(90deg, #4ade80, #facc15);
   transition: width 0.2s ease;
 }
+
+.hud__night-control { border-color: rgba(165,180,252,.45); background: rgba(35,43,77,.92); }
+.ghost-alert { position: absolute; z-index: 4; top: 46%; left: 50%; transform: translate(-50%, -50%); width: min(340px, calc(100% - 28px)); padding: 14px; text-align: center; border-color: rgba(196,208,241,.42); background: rgba(16,22,39,.9); animation: ghost-appear .6s ease-out both; }
+.ghost-alert > span { display: block; font-size: 30px; filter: drop-shadow(0 0 12px #b8c9ff); }
+.ghost-alert strong { display: block; margin: 5px 0 9px; font-size: 12px; }
+.ghost-alert button { border: 1px solid rgba(196,208,241,.3); border-radius: 8px; padding: 7px 10px; color: #e8edff; background: rgba(95,112,158,.28); font-size: 11px; cursor: pointer; }
+@keyframes ghost-appear { from { opacity: 0; transform: translate(-50%, -46%) scale(.94); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+
+.service-model { margin-top: 10px; overflow: hidden; border: 1px solid rgba(110,231,183,.2); border-radius: 10px; }
+.service-model iframe { display: block; width: 100%; height: 245px; border: 0; }
+.service-model a { display: block; padding: 9px 11px; color: #a7d7b8; font-size: 11px; text-decoration: none; }
 
 @media (max-width: 768px) {
   .hud {

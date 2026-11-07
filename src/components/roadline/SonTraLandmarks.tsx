@@ -3,7 +3,27 @@
 import { Html } from "@react-three/drei";
 import { useMemo } from "react";
 import * as THREE from "three";
-import { LandmarkPoint, SON_TRA_LANDMARKS } from "./roadData";
+import { Human } from "../figures/Human";
+import { BanCoSummit, BanyanTree, QuanAmStatue, TrailheadGate } from "./LandmarkModels";
+import { getClosestRoadInfo, getRoadCurve, getRouteFrame, getTerrainHeight, LandmarkPoint, SON_TRA_LANDMARKS } from "./roadData";
+
+const LM = Object.fromEntries(SON_TRA_LANDMARKS.map((l) => [l.id, l.position])) as Record<string, [number, number, number]>;
+const START_TAN = getRoadCurve().getTangentAt(0);
+const START_HEADING = Math.atan2(START_TAN.x, START_TAN.z);
+
+// Put the Linh Ung plaza on whichever side of the road has more open ground, facing the road.
+const PLAZA = (() => {
+  const f = getRouteFrame(0.04);
+  const candidates = [1, -1].map((sgn) => {
+    const x = f.point.x + f.side.x * sgn * 12;
+    const z = f.point.z + f.side.z * sgn * 12;
+    return { sgn, x, z, open: getClosestRoadInfo(x, z).distance };
+  });
+  const best = candidates.reduce((a, b) => (b.open > a.open ? b : a));
+  const toRoad = Math.atan2(-f.side.x * best.sgn, -f.side.z * best.sgn);
+  const front = [best.x - f.side.x * best.sgn * 7.5, best.z - f.side.z * best.sgn * 7.5] as const;
+  return { x: best.x, z: best.z, y: getTerrainHeight(best.x, best.z), rotY: toRoad, front };
+})();
 
 export function SonTraLandmarks({
   activeLandmarkId,
@@ -32,137 +52,64 @@ export function SonTraLandmarks({
 
   return (
     <group name="SonTraLandmarks">
-      {/* 1. Trailhead Arch & Signboard at [0, 0.2, 62] */}
-      <group position={[0, 0.2, 62]}>
-        {/* Wooden Trailhead Arch */}
-        <mesh position={[-2.9, 1.9, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.16, 0.2, 3.8, 8]} />
-          <meshStandardMaterial color="#5c4028" roughness={0.85} />
-        </mesh>
-        <mesh position={[2.9, 1.9, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.16, 0.2, 3.8, 8]} />
-          <meshStandardMaterial color="#5c4028" roughness={0.85} />
-        </mesh>
-        <mesh position={[0, 3.65, 0]} castShadow receiveShadow>
-          <boxGeometry args={[6.6, 0.45, 0.4]} />
-          <meshStandardMaterial color="#47311e" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, 4.02, 0]} castShadow>
-          <boxGeometry args={[4.4, 0.48, 0.22]} />
-          <meshStandardMaterial color="#1f4d36" roughness={0.6} />
+      {/* 1. Trailhead gate */}
+      <group position={LM.trailhead} rotation={[0, START_HEADING, 0]}>
+        <TrailheadGate />
+      </group>
+
+      {/* 2. Linh Ung Lady Buddha */}
+      <group position={[PLAZA.x, PLAZA.y, PLAZA.z]} rotation={[0, PLAZA.rotY, 0]}>
+        <QuanAmStatue />
+      </group>
+
+      {/* 3. Ancient Banyan Tree */}
+      <group position={LM["banyan-tree"]}>
+        <BanyanTree />
+      </group>
+
+      {/* Resting hikers beneath the banyan */}
+      <group position={[LM["banyan-tree"][0] + 4.5, LM["banyan-tree"][1] + 0.05, LM["banyan-tree"][2] + 3.5]} rotation={[0, -0.55, 0]}>
+        <Human pose="sit" shirt="#34495e" hat="cap" position={[-0.8, 0, 0]} rotation={[0, 0.6, 0]} />
+        <Human pose="sit" shirt="#d9d0bd" hat="non-la" skin="#c88f6b" position={[0.9, 0, -0.35]} rotation={[0, -0.7, 0]} />
+        <mesh position={[0.05, 0.25, 0.9]} castShadow>
+          <boxGeometry args={[0.55, 0.38, 0.4]} />
+          <meshStandardMaterial color="#b77639" roughness={0.9} />
         </mesh>
       </group>
 
-      {/* 2. Linh Ung Pagoda Overlook & White Quan Am Statue at [22, 2.4, 20] */}
-      <group position={[26.5, 2.4, 19.5]} rotation={[0, 1.15, 0]}>
-        {/* Stone Courtyard & Lotus Pedestal */}
-        <mesh position={[0, 0.3, 0]} receiveShadow castShadow>
-          <cylinderGeometry args={[3.4, 3.8, 0.6, 12]} />
-          <meshStandardMaterial color="#d8ddd8" roughness={0.7} />
-        </mesh>
-        <mesh position={[0, 0.85, 0]} receiveShadow castShadow>
-          <cylinderGeometry args={[1.6, 2.1, 0.55, 16]} />
-          <meshStandardMaterial color="#e6dfd5" roughness={0.6} />
-        </mesh>
-        {/* White Lady Buddha (Tượng Phật Bà Quan Âm) facing the East Sea */}
-        <mesh position={[0, 3.4, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.52, 0.92, 4.6, 16]} />
-          <meshStandardMaterial color="#f8faf7" roughness={0.35} />
-        </mesh>
-        <mesh position={[0, 6.0, 0]} castShadow>
-          <sphereGeometry args={[0.46, 16, 16]} />
-          <meshStandardMaterial color="#f8faf7" roughness={0.35} />
-        </mesh>
-        {/* Halo ring behind head */}
-        <mesh position={[0, 6.1, -0.25]} castShadow>
-          <torusGeometry args={[0.72, 0.05, 8, 24]} />
-          <meshStandardMaterial color="#e8c872" metalness={0.5} roughness={0.3} />
-        </mesh>
+      {/* Two visitors in front of the Lady Buddha */}
+      <group name="PlazaVisitors" position={[PLAZA.front[0], PLAZA.y, PLAZA.front[1]]} rotation={[0, PLAZA.rotY + Math.PI, 0]}>
+        <Human pose="stand" shirt="#d7d0c2" hat="cap" pole position={[-0.7, 0, 0]} rotation={[0, 0.3, 0]} />
+        <Human pose="stand" shirt="#263b4a" hat="non-la" skin="#c88f6b" position={[0.8, 0, -0.4]} rotation={[0, -0.3, 0]} />
       </group>
 
-      {/* 3. Ancient Banyan Tree (Cây Đa Ngàn Năm) at [-40, 6.7, -55] */}
-      <group position={[-40, 6.7, -55]}>
-        {/* Massive Gnarled Main Trunk */}
-        <mesh position={[0, 2.6, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[1.15, 1.75, 5.2, 11]} />
-          <meshStandardMaterial color="#4e3b2b" roughness={0.95} />
-        </mesh>
-        {/* Cascading Aerial Roots (Rễ phụ) */}
-        {banyanRoots.map((r, idx) => (
-          <mesh key={idx} position={[r.x, r.height / 2, r.z]} castShadow receiveShadow>
-            <cylinderGeometry args={[r.radius * 0.7, r.radius, r.height, 6]} />
-            <meshStandardMaterial color="#5a4533" roughness={0.92} />
+      {/* 4. Ban Co Peak Summit */}
+      <group position={LM["ban-co-peak"]}>
+        <BanCoSummit />
+      </group>
+
+      {/* Rocky Son Tra shoreline cove with sea stacks and small surf */}
+      <group name="BaiDaCove" position={[-30, -0.05, 66]}>
+        {[
+          { p: [0, 0.7, 0] as [number, number, number], s: [5.5, 2.1, 3.2] as [number, number, number], c: "#555b56" },
+          { p: [5.2, 1.1, -2.4] as [number, number, number], s: [3.1, 3.3, 2.6] as [number, number, number], c: "#686b62" },
+          { p: [-5.3, 0.65, -2.1] as [number, number, number], s: [4.3, 1.8, 3] as [number, number, number], c: "#464d49" },
+          { p: [2.2, 0.4, 3.7] as [number, number, number], s: [3.7, 1.1, 2.4] as [number, number, number], c: "#77796e" },
+          { p: [-8, 2.4, -5.5] as [number, number, number], s: [5.2, 5.2, 3.3] as [number, number, number], c: "#515950" },
+        ].map((rock, index) => (
+          <mesh key={index} position={rock.p} scale={rock.s} rotation={[0.1 * index, 0.23 * index, 0.06 * index]} castShadow receiveShadow>
+            <icosahedronGeometry args={[1, 1]} />
+            <meshStandardMaterial color={rock.c} roughness={0.96} flatShading />
           </mesh>
         ))}
-        {/* Multi-layered Giant Banyan Canopy */}
-        <mesh position={[0, 5.8, 0]} castShadow receiveShadow>
-          <dodecahedronGeometry args={[4.4, 1]} />
-          <meshStandardMaterial color="#275933" roughness={0.85} />
+        <mesh position={[0, 0.15, 8]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[10, 32]} />
+          <meshStandardMaterial color="#3ca6b7" transparent opacity={0.62} roughness={0.26} />
         </mesh>
-        <mesh position={[-2.4, 5.1, 1.5]} castShadow receiveShadow>
-          <dodecahedronGeometry args={[3.1, 1]} />
-          <meshStandardMaterial color="#2f683c" roughness={0.85} />
+        <mesh position={[0, 0.22, 7.8]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[6.8, 8.1, 32]} />
+          <meshBasicMaterial color="#e8f5e9" transparent opacity={0.65} side={THREE.DoubleSide} />
         </mesh>
-        <mesh position={[2.5, 5.2, -1.4]} castShadow receiveShadow>
-          <dodecahedronGeometry args={[3.2, 1]} />
-          <meshStandardMaterial color="#224e2c" roughness={0.85} />
-        </mesh>
-      </group>
-
-      {/* 4. Ban Co Peak Summit (Đỉnh Bàn Cờ) at [-10, 13.0, -94] */}
-      <group position={[-10, 13.0, -94]}>
-        {/* Circular Stone Summit Platform */}
-        <mesh position={[0, 0.18, 0]} receiveShadow castShadow>
-          <cylinderGeometry args={[5.2, 5.6, 0.36, 24]} />
-          <meshStandardMaterial color="#8d948e" roughness={0.85} />
-        </mesh>
-
-        {/* Stone Chess Table (Bàn Cờ) */}
-        <mesh position={[0, 0.65, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.85, 0.7, 0.6, 12]} />
-          <meshStandardMaterial color="#6e736e" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, 0.98, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.45, 0.1, 1.45]} />
-          <meshStandardMaterial color="#c9cec6" roughness={0.6} />
-        </mesh>
-
-        {/* Seated Fairy Chess Player Statue (Tượng Đế Thích) */}
-        <group position={[-1.25, 0.36, 0]} rotation={[0, Math.PI / 2, 0]}>
-          {/* Stone Stool */}
-          <mesh position={[0, 0.25, 0]} castShadow>
-            <cylinderGeometry args={[0.35, 0.4, 0.5, 10]} />
-            <meshStandardMaterial color="#757a75" roughness={0.85} />
-          </mesh>
-          {/* Seated Torso */}
-          <mesh position={[0, 0.85, 0]} castShadow>
-            <capsuleGeometry args={[0.26, 0.55, 6, 12]} />
-            <meshStandardMaterial color="#d4cfc4" roughness={0.5} />
-          </mesh>
-          {/* Head & Beard */}
-          <mesh position={[0, 1.45, 0.05]} castShadow>
-            <sphereGeometry args={[0.21, 14, 14]} />
-            <meshStandardMaterial color="#d4cfc4" roughness={0.5} />
-          </mesh>
-        </group>
-
-        {/* Empty Stone Stool opposite the player */}
-        <mesh position={[1.25, 0.61, 0]} castShadow>
-          <cylinderGeometry args={[0.35, 0.4, 0.5, 10]} />
-          <meshStandardMaterial color="#757a75" roughness={0.85} />
-        </mesh>
-
-        {/* Iconic Summit Milestone Marker (Đỉnh Bàn Cờ 700m) */}
-        <group position={[2.6, 0.36, -2.1]} rotation={[0, -0.4, 0]}>
-          <mesh position={[0, 0.65, 0]} castShadow>
-            <boxGeometry args={[0.55, 1.3, 0.55]} />
-            <meshStandardMaterial color="#e8ece6" roughness={0.65} />
-          </mesh>
-          <mesh position={[0, 1.45, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
-            <coneGeometry args={[0.39, 0.45, 4]} />
-            <meshStandardMaterial color="#c9332b" roughness={0.5} />
-          </mesh>
-        </group>
       </group>
 
       {/* Interactive Checkpoint Beacons & Floating Labels along the Roadline */}

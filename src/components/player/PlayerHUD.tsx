@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BANYAN_TRAIL_POINTS,
   LandmarkPoint,
   ROAD_CONTROL_POINTS,
+  ROUTE_LENGTH_KM,
+  sceneToLatLon,
   SON_TRA_LANDMARKS,
 } from "../roadline/roadData";
 import { CameraMode } from "./types";
@@ -21,12 +23,18 @@ interface PlayerHUDProps {
   onCloseLandmark: () => void;
   onSelectCheckpoint: (landmark: LandmarkPoint) => void;
   discoveredIds: string[];
+  isNight: boolean;
+  onToggleNight: () => void;
+  ghostVisible: boolean;
+  monkeysNearby: boolean;
+  monkeyPlaying: boolean;
+  onToggleMonkeyPlay: () => void;
 }
 
 function toMiniMapCoord(x: number, z: number): [number, number] {
-  // Map world X [-55, 45], Z [-105, 75] into SVG [0..140, 0..160]
-  const svgX = ((x + 55) / 100) * 120 + 10;
-  const svgY = ((z + 105) / 180) * 140 + 10;
+  // Map world X [-80, 80], Z [-50, 50] uniformly into SVG [0..140, 0..160]
+  const svgX = ((x + 80) / 160) * 120 + 10;
+  const svgY = ((z + 50) / 160) * 120 + 35;
   return [svgX, svgY];
 }
 
@@ -42,9 +50,32 @@ export function PlayerHUD({
   onCloseLandmark,
   onSelectCheckpoint,
   discoveredIds,
+  isNight,
+  onToggleNight,
+  ghostVisible,
+  monkeysNearby,
+  monkeyPlaying,
+  onToggleMonkeyPlay,
 }: PlayerHUDProps) {
+  const [mapLayer, setMapLayer] = useState<"route" | "osm">("osm");
+  const [ghostModelOpen, setGhostModelOpen] = useState(false);
+
+  // Live OSM tracking: scene position -> real lat/lon, debounced so the embed isn't reloaded every frame
+  const [lat, lon] = sceneToLatLon(playerPosition[0], playerPosition[2]);
+  const [trackedPos, setTrackedPos] = useState<[number, number]>([lat, lon]);
+  useEffect(() => {
+    const t = window.setTimeout(() => setTrackedPos([lat, lon]), 1200);
+    return () => window.clearTimeout(t);
+  }, [lat, lon]);
+  const osmSrc = useMemo(() => {
+    const [la, lo] = trackedPos;
+    const d = 0.006;
+    const bbox = [lo - d, la - d * 0.6, lo + d, la + d * 0.6].map((n) => n.toFixed(5)).join("%2C");
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${la.toFixed(5)}%2C${lo.toFixed(5)}`;
+  }, [trackedPos]);
+
   const elevationMeters = Math.round(45 + Math.max(0, playerPosition[1]) * 50);
-  const distanceKm = (roadProgress * 9.8).toFixed(1);
+  const distanceKm = (roadProgress * ROUTE_LENGTH_KM).toFixed(1);
 
   const mainRoadPolyline = useMemo(() => {
     return ROAD_CONTROL_POINTS.map(([x, , z]) =>
@@ -73,7 +104,7 @@ export function PlayerHUD({
           <div className="hud__stats">
             <span>Elevation: {elevationMeters}m</span>
             <span>·</span>
-            <span>Route: {distanceKm} / 9.8 km</span>
+            <span>Route: {distanceKm} / {ROUTE_LENGTH_KM.toFixed(1)} km</span>
             <span>·</span>
             <span>
               Discovered: {discoveredIds.length}/{SON_TRA_LANDMARKS.length}
@@ -115,14 +146,30 @@ export function PlayerHUD({
             >
               3D Road Map
             </button>
+            <button className={`hud__card hud__control ${isNight ? "hud__control--active hud__night-control" : ""}`} onClick={onToggleNight}>
+              {isNight ? "☾ Ban đêm" : "☀ Ban ngày"}
+            </button>
           </div>
 
           {/* Mini-Map of Son Tra Roadline */}
           <div className="hud__card hud__minimap">
             <div className="hud__minimap-header">
-              <span>SON TRA ROADLINE</span>
-              <span>{Math.round(roadProgress * 100)}%</span>
+              <span>{mapLayer === "osm" ? "OPENSTREETMAP · SƠN TRÀ" : "SON TRA ROADLINE"}</span>
+              <button className="hud__map-toggle" onClick={() => setMapLayer((layer) => layer === "route" ? "osm" : "route")}>
+                {mapLayer === "osm" ? "Tuyến 3D" : "OSM"}
+              </button>
             </div>
+            {mapLayer === "osm" ? (
+              <div className="hud__osm-map">
+                <iframe
+                  title="Bản đồ OpenStreetMap bán đảo Sơn Trà"
+                  loading="lazy"
+                  src={osmSrc}
+                />
+                <a href={`https://www.openstreetmap.org/?mlat=${lat.toFixed(5)}&mlon=${lon.toFixed(5)}#map=16/${lat.toFixed(5)}/${lon.toFixed(5)}`} target="_blank" rel="noreferrer">Vị trí {lat.toFixed(5)}, {lon.toFixed(5)} · Mở bản đồ lớn ↗</a>
+              </div>
+            ) : <>
+            <div className="hud__minimap-progress">Tiến độ tuyến: {Math.round(roadProgress * 100)}%</div>
             <svg viewBox="0 0 140 160" className="hud__minimap-svg">
               {/* Banyan Spur Trail */}
               <polyline
@@ -167,9 +214,18 @@ export function PlayerHUD({
                 strokeWidth="1.6"
               />
             </svg>
+            </>}
           </div>
         </div>
       </div>
+
+      {ghostVisible && isNight && (
+        <div className="hud__card ghost-alert">
+          <span>👻</span><strong>Bạn vừa thấy gì đó trong rừng…</strong>
+          <button onClick={() => setGhostModelOpen((open) => !open)}>{ghostModelOpen ? "Ẩn mô hình" : "Xem ma 3D"}</button>
+          {ghostModelOpen && <div className="service-model"><iframe title="Mô hình ma Sketchfab" allow="autoplay; fullscreen; xr-spatial-tracking" src="https://sketchfab.com/models/fe09a57ad1be46d39a1475e4ff6fefdf/embed?autostart=1&ui_theme=dark" /><a href="https://sketchfab.com/3d-models/gost-fe09a57ad1be46d39a1475e4ff6fefdf" target="_blank" rel="noreferrer">Mở mô hình ma trên Sketchfab ↗</a></div>}
+        </div>
+      )}
 
       {/* Center Interaction Prompt & Active Landmark Modal */}
       <div className="hud__center">
@@ -182,6 +238,13 @@ export function PlayerHUD({
             <span>
               Explore <strong>{nearbyLandmark.vietnameseName}</strong>
             </span>
+          </button>
+        )}
+
+        {monkeysNearby && !selectedLandmark && (
+          <button className="hud__card hud__prompt hud__monkey-prompt" onClick={onToggleMonkeyPlay}>
+            <span className="hud__key">F</span>
+            <span>{monkeyPlaying ? <>Đang chơi cùng khỉ · <strong>Dừng chơi</strong></> : <>Khỉ Sơn Trà tò mò · <strong>Chơi cùng khỉ</strong></>}</span>
           </button>
         )}
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { Suspense } from "react";
+import { memo, Suspense } from "react";
+import { RoadsideDetails } from "./RoadsideDetails";
 import {
   ForestBackdrop,
   ForestTrees,
   RoadSegments,
+  RoadsideVehicles,
   RoadsideGrass,
   WildlifeZone,
 } from "./RoadlineModels";
@@ -14,27 +16,44 @@ import { LandmarkPoint } from "./roadData";
 
 export * from "./roadData";
 export * from "./RoadlineModels";
+export { RoadsideDetails } from "./RoadsideDetails";
 export * from "./SonTraLandmarks";
 export * from "./SonTraTerrain";
+
+// Static scenery must not re-render every frame when the player position changes.
+const StaticTerrain = memo(SonTraTerrain);
+const StaticRoad = memo(RoadSegments);
+const StaticTrees = memo(ForestTrees);
+const StaticBackdrop = memo(ForestBackdrop);
+const StaticRoadside = memo(RoadsideDetails);
+const StaticGrass = memo(RoadsideGrass);
 
 export function SonTraRoadline({
   activeLandmarkId,
   discoveredIds,
   onSelectLandmark,
+  playerPosition,
+  monkeyPlaying,
+  monkeysApproach,
 }: {
   activeLandmarkId?: string | null;
   discoveredIds: string[];
   onSelectLandmark?: (landmark: LandmarkPoint) => void;
+  playerPosition: [number, number, number];
+  monkeyPlaying: boolean;
+  monkeysApproach: boolean;
 }) {
   return (
     <group name="SonTraWorld">
-      <SonTraTerrain />
+      <StaticTerrain />
       <Suspense fallback={null}>
-        <RoadSegments />
-        <ForestTrees />
-        <ForestBackdrop />
-        <RoadsideGrass />
-        <WildlifeZone />
+        <StaticRoad />
+        <StaticTrees />
+        <StaticBackdrop />
+        <StaticRoadside />
+        <StaticGrass />
+        <WildlifeZone playerPosition={playerPosition} playing={monkeyPlaying} approachPlayer={monkeysApproach} />
+        <RoadsideVehicles />
       </Suspense>
       <SonTraLandmarks
         activeLandmarkId={activeLandmarkId}

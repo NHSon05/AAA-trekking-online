@@ -15,6 +15,8 @@ import {
   getClosestRoadInfo,
   getRoadCurve,
   LandmarkPoint,
+  MONKEY_TERRITORIES,
+  ROUTE_START,
   SON_TRA_LANDMARKS,
   SonTraRoadline,
 } from "./roadline";
@@ -25,6 +27,7 @@ export function ExploreScene() {
   const [autoTrek, setAutoTrek] = useState(false);
   const [isNight, setIsNight] = useState(false);
   const [ghostVisible, setGhostVisible] = useState(false);
+  const [monkeyPlaying, setMonkeyPlaying] = useState(false);
 
   // Start at the Son Tra Coastal Trailhead facing up the roadline
   const initialHeading = useMemo(() => {
@@ -36,13 +39,11 @@ export function ExploreScene() {
     position: [number, number, number];
     rotationY: number;
   }>({
-    position: [0, 0.2, 62],
+    position: ROUTE_START,
     rotationY: initialHeading,
   });
 
-  const [playerPosition, setPlayerPosition] = useState<[number, number, number]>([
-    0, 0.2, 62,
-  ]);
+  const [playerPosition, setPlayerPosition] = useState<[number, number, number]>(ROUTE_START);
   const [discoveredIds, setDiscoveredIds] = useState<string[]>(["trailhead"]);
   const [selectedLandmark, setSelectedLandmark] =
     useState<LandmarkPoint | null>(null);
@@ -51,6 +52,11 @@ export function ExploreScene() {
     () => getClosestRoadInfo(playerPosition[0], playerPosition[2]),
     [playerPosition[0], playerPosition[2]]
   );
+  const monkeyCenters = useMemo(() => MONKEY_TERRITORIES.map((territory) => {
+    const landmark = SON_TRA_LANDMARKS.find(({ id }) => id === territory.landmarkId)!;
+    return [landmark.position[0] + territory.offset[0], landmark.position[2] + territory.offset[2]] as const;
+  }), []);
+  const monkeysApproach = monkeyCenters.some(([x, z]) => Math.hypot(playerPosition[0] - x, playerPosition[2] - z) < 19);
 
   // Keep the apparition rare and brief so the night ride stays surprising.
   useEffect(() => {
@@ -101,6 +107,9 @@ export function ExploreScene() {
           prev?.id === nearbyLandmark.id ? null : nearbyLandmark
         );
       }
+      if (e.code === "KeyF" && monkeysApproach && !e.repeat) {
+        setMonkeyPlaying((playing) => !playing);
+      }
       if (
         ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
           e.code
@@ -111,7 +120,7 @@ export function ExploreScene() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [nearbyLandmark]);
+  }, [nearbyLandmark, monkeysApproach]);
 
   const handleSelectCheckpoint = useCallback((lm: LandmarkPoint) => {
     setAutoTrek(false);
@@ -169,6 +178,9 @@ export function ExploreScene() {
           activeLandmarkId={selectedLandmark?.id ?? nearbyLandmark?.id}
           discoveredIds={discoveredIds}
           onSelectLandmark={handleSelectCheckpoint}
+          playerPosition={playerPosition}
+          monkeyPlaying={monkeyPlaying}
+          monkeysApproach={monkeysApproach}
         />
 
         {/* Trekker Character Controller */}
@@ -206,6 +218,9 @@ export function ExploreScene() {
         isNight={isNight}
         onToggleNight={() => setIsNight((night) => !night)}
         ghostVisible={ghostVisible}
+        monkeysNearby={monkeysApproach}
+        monkeyPlaying={monkeyPlaying}
+        onToggleMonkeyPlay={() => setMonkeyPlaying((playing) => !playing)}
       />
     </div>
   );

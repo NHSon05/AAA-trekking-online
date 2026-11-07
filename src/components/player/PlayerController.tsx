@@ -3,7 +3,7 @@
 import { useFrame } from "@react-three/fiber";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { getClosestRoadInfo, getRoadCurve, getTerrainHeight } from "../roadline/roadData";
+import { getClosestRoadInfo, getRoadCurve, getTerrainHeight, ROUTE_START } from "../roadline/roadData";
 import { PlayerModel } from "./PlayerModel";
 import { PlayerProps } from "./types";
 
@@ -23,7 +23,7 @@ const keyMap: Record<string, string> = {
 export const PlayerController = forwardRef<THREE.Group, PlayerProps>(
   function PlayerController(
     {
-      position = [0, 0.2, 62],
+      position = ROUTE_START,
       rotationY = Math.PI,
       speed = 4.6,
       modelPath,
