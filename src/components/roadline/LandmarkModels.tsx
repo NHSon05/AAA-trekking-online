@@ -280,7 +280,7 @@ export function BanyanTree() {
 }
 
 const BAN_CO_MODEL_PATH = "/models/ban-co-summit/ban-co-summit.gltf";
-const BAN_CO_MODEL_HEIGHT = 4.9;
+const BAN_CO_MODEL_WIDTH = 7.1;
 const BAN_CO_MODEL_BASE = 0.72;
 
 /** Ban Co Peak: imported scanned summit model on a stone platform. */
@@ -288,7 +288,6 @@ export function BanCoSummit() {
   const gltf = useGLTF(BAN_CO_MODEL_PATH);
   const summitModel = useMemo(() => {
     const clone = gltf.scene.clone(true);
-    clone.rotation.x = -Math.PI / 2; // source OBJ is Z-up; the Three.js world is Y-up
     clone.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         child.castShadow = true;
@@ -298,7 +297,7 @@ export function BanCoSummit() {
     const box = new THREE.Box3().setFromObject(clone);
     const dimensions = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
-    const scale = BAN_CO_MODEL_HEIGHT / (dimensions.y || 1);
+    const scale = BAN_CO_MODEL_WIDTH / (Math.max(dimensions.x, dimensions.z) || 1);
     clone.scale.setScalar(scale);
     clone.position.set(-center.x * scale, BAN_CO_MODEL_BASE - box.min.y * scale, -center.z * scale);
     const wrapper = new THREE.Group();
